@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jackalizer - Пикселизатор изображений</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+    <h1 class="main-title">Jackalizer</h1>
+
+    <div class="main-container">
+        <div class="panel left-panel">
+            <div class="drop-zone" id="dropZone">
+                <p>your photo</p>
+                <input type="file" id="fileInput" accept="image/*">
+            </div>
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div class="panel right-panel">
+            <div class="control-group">
+                <label for="pixelSize">Степень пикселизации: <span id="pixelSizeValue">62</span></label>
+                <input type="range" id="pixelSize" min="2" max="100" value="62">
+            </div>
+
+            <div class="control-group hidden" id="brushControls">
+                <label>Режим рисования:</label>
+                <div class="button-group">
+                    <button id="brushBtn" class="mode-btn">🖌️ Кисть</button>
+                    <button id="eraserBtn" class="mode-btn">🧹 Ластик</button>
+                </div>
+                <label for="brushSize">Размер кисти: <span id="brushSizeValue">30</span></label>
+                <input type="range" id="brushSize" min="5" max="100" value="30">
+                <button id="clearMaskBtn" class="secondary-btn">Очистить всё</button>
+                <button id="applyFullBtn" class="secondary-btn">Применить ко всему</button>
+            </div>
+
+            <div class="buttons hidden" id="buttons">
+                <button id="downloadBtn">Скачать результат</button>
+                <button id="resetBtn">Новое изображение</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Copyright 2025 Emile Alexanyan
+    </footer>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const buttons = document.getElementById('buttons');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const pixelSizeSlider = document.getElementById('pixelSize');
+        const pixelSizeValue = document.getElementById('pixelSizeValue');
+        const brushControls = document.getElementById('brushControls');
+        const brushBtn = document.getElementById('brushBtn');
+        const eraserBtn = document.getElementById('eraserBtn');
+        const brushSizeSlider = document.getElementById('brushSize');
+        const brushSizeValue = document.getElementById('brushSizeValue');
+        const clearMaskBtn = document.getElementById('clearMaskBtn');
+        const applyFullBtn = document.getElementById('applyFullBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        let currentImage = null;
+        let originalImageData = null;
+        let pixelatedImageData = null;
+        let maskCanvas = null;
+        let maskCtx = null;
+        let isDrawing = false;
+        let brushMode = 'brush'; // 'brush' or 'eraser'
+        let brushSize = 30;
+
+        // Drag & Drop
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                loadImage(file);
+            }
+        });
+
+        // Загрузка изображения
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    setupCanvas(img);
+                    showControls();
+                    applyPixelation();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Настройка канваса
+        function setupCanvas(img) {
+            const maxWidth = 450;
+            const scale = Math.min(1, maxWidth / img.width);
+            const width = img.width * scale;
+            const height = img.height * scale;
+
+            canvas.width = width;
+            canvas.height = height;
+
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Сохраняем оригинальные данные изображения
+            originalImageData = ctx.getImageData(0, 0, width, height);
+
+            // Создаем маску для выборочной пикселизации
+            maskCanvas = document.createElement('canvas');
+            maskCanvas.width = width;
+            maskCanvas.height = height;
+            maskCtx = maskCanvas.getContext('2d');
+            maskCtx.fillStyle = 'black';
+            maskCtx.fillRect(0, 0, width, height);
+        }
+
+        // Показать элементы управления
+        function showControls() {
+            dropZone.classList.add('hidden');
+            canvas.style.display = 'block';
+            brushControls.classList.remove('hidden');
+            buttons.classList.remove('hidden');
+        }
+
+        // Улучшенная пикселизация с маскированием
+        function applyPixelation() {
+            if (!currentImage || !originalImageData) return;
+
+            const pixelSize = parseInt(pixelSizeSlider.value);
+            const width = canvas.width;
+            const height = canvas.height;
+
+            // Восстанавливаем оригинал
+            ctx.putImageData(originalImageData, 0, 0);
+
+            // Если степень пикселизации = 2 (минимум), показываем оригинал
+            if (pixelSize <= 2) {
+                return;
+            }
+
+            // Создаем временный canvas для пикселизации
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Уменьшаем размер согласно степени пикселизации
+            const smallWidth = Math.ceil(width / pixelSize);
+            const smallHeight = Math.ceil(height / pixelSize);
+
+            tempCanvas.width = smallWidth;
+            tempCanvas.height = smallHeight;
+
+            // Отключаем сглаживание для четких пикселей
+            tempCtx.imageSmoothingEnabled = false;
+
+            // Рисуем уменьшенную версию
+            tempCtx.drawImage(canvas, 0, 0, width, height, 0, 0, smallWidth, smallHeight);
+
+            // Создаем canvas для пикселизированной версии
+            const pixelatedCanvas = document.createElement('canvas');
+            const pixelatedCtx = pixelatedCanvas.getContext('2d');
+            pixelatedCanvas.width = width;
+            pixelatedCanvas.height = height;
+            pixelatedCtx.imageSmoothingEnabled = false;
+
+            // Растягиваем обратно на оригинальный размер
+            pixelatedCtx.drawImage(tempCanvas, 0, 0, smallWidth, smallHeight, 0, 0, width, height);
+
+            // Сохраняем пикселизированную версию
+            pixelatedImageData = pixelatedCtx.getImageData(0, 0, width, height);
+
+            // Применяем маску
+            applyMask();
+        }
+
+        // Применение маски для комбинирования оригинала и пикселизации
+        function applyMask() {
+            if (!originalImageData || !pixelatedImageData || !maskCanvas) return;
+
+            const width = canvas.width;
+            const height = canvas.height;
+
+            const original = originalImageData.data;
+            const pixelated = pixelatedImageData.data;
+            const maskData = maskCtx.getImageData(0, 0, width, height).data;
+            const result = ctx.createImageData(width, height);
+            const resultData = result.data;
+
+            for (let i = 0; i < resultData.length; i += 4) {
+                const maskValue = maskData[i] / 255; // 0 = оригинал, 1 = пикселизация
+
+                resultData[i] = original[i] * (1 - maskValue) + pixelated[i] * maskValue;
+                resultData[i + 1] = original[i + 1] * (1 - maskValue) + pixelated[i + 1] * maskValue;
+                resultData[i + 2] = original[i + 2] * (1 - maskValue) + pixelated[i + 2] * maskValue;
+                resultData[i + 3] = original[i + 3];
+            }
+
+            ctx.putImageData(result, 0, 0);
+        }
+
+        // Рисование маски
+        function getCanvasCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+
+        function drawOnMask(x, y) {
+            if (!maskCtx) return;
+
+            maskCtx.fillStyle = brushMode === 'brush' ? 'white' : 'black';
+            maskCtx.beginPath();
+            maskCtx.arc(x, y, brushSize, 0, Math.PI * 2);
+            maskCtx.fill();
+
+            applyMask();
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (!currentImage) return;
+            isDrawing = true;
+            const coords = getCanvasCoordinates(e);
+            drawOnMask(coords.x, coords.y);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing || !currentImage) return;
+            const coords = getCanvasCoordinates(e);
+            drawOnMask(coords.x, coords.y);
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            isDrawing = false;
+        });
+
+        // Touch events для мобильных
+        canvas.addEventListener('touchstart', (e) => {
+            if (!currentImage) return;
+            e.preventDefault();
+            isDrawing = true;
+            const touch = e.touches[0];
+            const coords = getCanvasCoordinates(touch);
+            drawOnMask(coords.x, coords.y);
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!isDrawing || !currentImage) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const coords = getCanvasCoordinates(touch);
+            drawOnMask(coords.x, coords.y);
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            isDrawing = false;
+        });
+
+        // Управление кистью
+        brushBtn.addEventListener('click', () => {
+            brushMode = 'brush';
+            brushBtn.classList.add('active');
+            eraserBtn.classList.remove('active');
+        });
+
+        eraserBtn.addEventListener('click', () => {
+            brushMode = 'eraser';
+            eraserBtn.classList.add('active');
+            brushBtn.classList.remove('active');
+        });
+
+        brushSizeSlider.addEventListener('input', (e) => {
+            brushSize = parseInt(e.target.value);
+            brushSizeValue.textContent = brushSize;
+        });
+
+        clearMaskBtn.addEventListener('click', () => {
+            if (!maskCtx) return;
+            maskCtx.fillStyle = 'black';
+            maskCtx.fillRect(0, 0, canvas.width, canvas.height);
+            applyMask();
+        });
+
+        applyFullBtn.addEventListener('click', () => {
+            if (!maskCtx) return;
+            maskCtx.fillStyle = 'white';
+            maskCtx.fillRect(0, 0, canvas.width, canvas.height);
+            applyMask();
+        });
+
+        // Слушатели изменений
+        pixelSizeSlider.addEventListener('input', (e) => {
+            pixelSizeValue.textContent = e.target.value;
+            applyPixelation();
+        });
+
+        // Скачивание
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'pixelated-image.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+        // Сброс
+        resetBtn.addEventListener('click', () => {
+            currentImage = null;
+            originalImageData = null;
+            pixelatedImageData = null;
+            maskCanvas = null;
+            maskCtx = null;
+            fileInput.value = '';
+            pixelSizeSlider.value = 62;
+            pixelSizeValue.textContent = '62';
+            brushSize = 30;
+            brushSizeValue.textContent = '30';
+            brushMode = 'brush';
+            brushBtn.classList.remove('active');
+            eraserBtn.classList.remove('active');
+            dropZone.classList.remove('hidden');
+            canvas.style.display = 'none';
+            brushControls.classList.add('hidden');
+            buttons.classList.add('hidden');
+        });
+
+        // Инициализация режима кисти
+        brushBtn.classList.add('active');
+    </script>
+</body>
+</html>

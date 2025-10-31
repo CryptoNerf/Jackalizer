@@ -1,0 +1,250 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-image: url('img/shakalizatordesctop3.jpg');
+    background-size: contain;
+    background-position: center bottom;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    /* padding-bottom: 60px; */
+    background-color: #A4CFEC;
+}
+
+@media (max-aspect-ratio: 1154/1724) {
+    body {
+        background-size: auto 100%;
+    }
+}
+
+.main-title {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 3em;
+    color: white;
+    text-shadow:
+        3px 3px 0px #333,
+        -1px -1px 0px #333,
+        1px -1px 0px #333,
+        -1px 1px 0px #333,
+        1px 1px 0px #333;
+    margin: 40px 0 30px 0;
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+.main-container {
+    display: flex;
+    gap: 30px;
+    max-width: 1200px;
+    width: 100%;
+    flex: 1;
+    align-items: flex-start;
+}
+
+.panel {
+    background: white;
+    border-radius: 15px;
+    padding: 30px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    flex: 1;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+}
+
+.left-panel {
+    max-width: 520px;
+}
+
+.right-panel {
+    max-width: 520px;
+}
+
+.drop-zone {
+    border: 2px solid #999;
+    border-radius: 10px;
+    padding: 100px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #f5f5f5;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.drop-zone.dragover {
+    background: #e8ebff;
+    border-color: #667eea;
+}
+
+.drop-zone p {
+    color: #333;
+    font-size: 1.1em;
+}
+
+.control-group {
+    margin-bottom: 20px;
+}
+
+.control-group label {
+    display: block;
+    margin-bottom: 10px;
+    color: #333;
+    font-weight: 600;
+    font-size: 0.95em;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.mode-btn {
+    flex: 1;
+    padding: 10px;
+    background: #e0e0e0;
+    border: 2px solid #999;
+    color: #333;
+    font-size: 0.9em;
+}
+
+.mode-btn.active {
+    background: #6ba3d4;
+    border-color: #5a8fc0;
+    color: white;
+}
+
+.mode-btn:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.secondary-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    background: #e0e0e0;
+    border: 2px solid #999;
+    color: #333;
+    font-size: 0.9em;
+}
+
+.secondary-btn:hover {
+    background: #d0d0d0;
+}
+
+input[type="range"] {
+    width: 100%;
+    height: 10px;
+    border-radius: 5px;
+    background: linear-gradient(to right, #6ba3d4 0%, #999 100%);
+    outline: none;
+    -webkit-appearance: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 0;
+    background: #999;
+    cursor: pointer;
+    border: 2px solid #666;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 0;
+    background: #999;
+    cursor: pointer;
+    border: 2px solid #666;
+}
+
+
+canvas {
+    border: 2px solid #999;
+    border-radius: 5px;
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    display: none;
+    cursor: crosshair;
+}
+
+.buttons {
+    display: flex;
+    gap: 10px;
+    flex-direction: column;
+    margin-top: 20px;
+}
+
+button {
+    background: #6ba3d4;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 5px;
+    font-size: 0.95em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+}
+
+button:hover {
+    background: #5a8fc0;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+footer {
+    margin-top: 30px;
+    color: #333;
+    font-size: 0.9em;
+    text-align: center;
+}
+
+.hidden {
+    display: none;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+@media (max-width: 1024px) {
+    .main-container {
+        flex-direction: column;
+    }
+
+    .panel {
+        max-width: 100%;
+    }
+
+    .main-title {
+        font-size: 2em;
+    }
+
+    body {
+        background-size: cover;
+    }
+}
