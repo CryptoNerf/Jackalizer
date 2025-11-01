@@ -11,8 +11,8 @@
 </head>
 <body>
     <h1 class="main-title">Jackalizer</h1>
-
-    <div class="main-container">
+    <img class="header-image" src="img/jackalizer2.png" alt="">
+    <div class="main-container" id="mainContainer">
         <div class="panel left-panel">
             <div class="drop-zone" id="dropZone">
                 <p>your photo</p>
@@ -21,7 +21,7 @@
             <canvas id="canvas"></canvas>
         </div>
 
-        <div class="panel right-panel">
+        <div class="panel right-panel hidden" id="rightPanel">
             <div class="control-group">
                 <label for="pixelSize">Степень пикселизации: <span id="pixelSizeValue">62</span></label>
                 <input type="range" id="pixelSize" min="2" max="100" value="62">
@@ -53,6 +53,8 @@
     <script>
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
+        const mainContainer = document.getElementById('mainContainer');
+        const rightPanel = document.getElementById('rightPanel');
         const buttons = document.getElementById('buttons');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -77,6 +79,7 @@
         let isDrawing = false;
         let brushMode = 'brush'; // 'brush' or 'eraser'
         let brushSize = 30;
+        let scaleRatio = 1; // Соотношение между оригиналом и отображаемым размером
 
         // Drag & Drop
         dropZone.addEventListener('click', () => fileInput.click());
@@ -125,9 +128,9 @@
         // Настройка канваса
         function setupCanvas(img) {
             const maxWidth = 450;
-            const scale = Math.min(1, maxWidth / img.width);
-            const width = img.width * scale;
-            const height = img.height * scale;
+            scaleRatio = Math.min(1, maxWidth / img.width);
+            const width = img.width * scaleRatio;
+            const height = img.height * scaleRatio;
 
             canvas.width = width;
             canvas.height = height;
@@ -150,6 +153,8 @@
         function showControls() {
             dropZone.classList.add('hidden');
             canvas.style.display = 'block';
+            rightPanel.classList.remove('hidden');
+            mainContainer.classList.add('two-panels');
             brushControls.classList.remove('hidden');
             buttons.classList.remove('hidden');
         }
@@ -333,11 +338,92 @@
             applyPixelation();
         });
 
-        // Скачивание
+        // Скачивание в оригинальном размере
         downloadBtn.addEventListener('click', () => {
+            if (!currentImage) return;
+
+            // Создаем canvas для экспорта в оригинальном размере
+            const exportCanvas = document.createElement('canvas');
+            const exportCtx = exportCanvas.getContext('2d');
+
+            const originalWidth = currentImage.width;
+            const originalHeight = currentImage.height;
+
+            exportCanvas.width = originalWidth;
+            exportCanvas.height = originalHeight;
+
+            // Отключаем сглаживание
+            exportCtx.imageSmoothingEnabled = false;
+
+            // Рисуем оригинальное изображение в полном размере
+            exportCtx.drawImage(currentImage, 0, 0, originalWidth, originalHeight);
+
+            // Если пикселизация применена
+            const pixelSize = parseInt(pixelSizeSlider.value);
+            if (pixelSize > 2) {
+                // Вычисляем размер пикселя для оригинального изображения
+                // Учитываем что pixelSize был для уменьшенного изображения
+                const scaledPixelSize = pixelSize / scaleRatio;
+
+                // Создаем маску в оригинальном размере
+                const exportMaskCanvas = document.createElement('canvas');
+                const exportMaskCtx = exportMaskCanvas.getContext('2d');
+                exportMaskCanvas.width = originalWidth;
+                exportMaskCanvas.height = originalHeight;
+                exportMaskCtx.imageSmoothingEnabled = true;
+
+                // Масштабируем маску до оригинального размера с сглаживанием
+                exportMaskCtx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height,
+                                       0, 0, originalWidth, originalHeight);
+
+                // Создаем пикселизированную версию в оригинальном размере
+                const smallWidth = Math.ceil(originalWidth / scaledPixelSize);
+                const smallHeight = Math.ceil(originalHeight / scaledPixelSize);
+
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = smallWidth;
+                tempCanvas.height = smallHeight;
+                tempCtx.imageSmoothingEnabled = true;
+
+                // Уменьшаем оригинал
+                tempCtx.drawImage(currentImage, 0, 0, originalWidth, originalHeight,
+                                 0, 0, smallWidth, smallHeight);
+
+                const pixelatedCanvas = document.createElement('canvas');
+                const pixelatedCtx = pixelatedCanvas.getContext('2d');
+                pixelatedCanvas.width = originalWidth;
+                pixelatedCanvas.height = originalHeight;
+                pixelatedCtx.imageSmoothingEnabled = false;
+
+                // Растягиваем обратно
+                pixelatedCtx.drawImage(tempCanvas, 0, 0, smallWidth, smallHeight,
+                                      0, 0, originalWidth, originalHeight);
+
+                // Комбинируем оригинал и пикселизацию с помощью маски
+                const originalData = exportCtx.getImageData(0, 0, originalWidth, originalHeight);
+                const pixelatedData = pixelatedCtx.getImageData(0, 0, originalWidth, originalHeight);
+                const maskData = exportMaskCtx.getImageData(0, 0, originalWidth, originalHeight);
+
+                const original = originalData.data;
+                const pixelated = pixelatedData.data;
+                const mask = maskData.data;
+
+                for (let i = 0; i < original.length; i += 4) {
+                    const maskValue = mask[i] / 255;
+
+                    originalData.data[i] = Math.round(original[i] * (1 - maskValue) + pixelated[i] * maskValue);
+                    originalData.data[i + 1] = Math.round(original[i + 1] * (1 - maskValue) + pixelated[i + 1] * maskValue);
+                    originalData.data[i + 2] = Math.round(original[i + 2] * (1 - maskValue) + pixelated[i + 2] * maskValue);
+                }
+
+                exportCtx.putImageData(originalData, 0, 0);
+            }
+
+            // Скачиваем
             const link = document.createElement('a');
-            link.download = 'pixelated-image.png';
-            link.href = canvas.toDataURL();
+            link.download = 'jackalizer-result.png';
+            link.href = exportCanvas.toDataURL('image/png');
             link.click();
         });
 
@@ -358,6 +444,8 @@
             eraserBtn.classList.remove('active');
             dropZone.classList.remove('hidden');
             canvas.style.display = 'none';
+            rightPanel.classList.add('hidden');
+            mainContainer.classList.remove('two-panels');
             brushControls.classList.add('hidden');
             buttons.classList.add('hidden');
         });
