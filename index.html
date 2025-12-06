@@ -27,8 +27,21 @@
 
         <div class="panel right-panel hidden" id="rightPanel">
             <div class="control-group">
+                <label>Выберите эффект:</label>
+                <div class="button-group">
+                    <button id="pixelEffectBtn" class="mode-btn active">🎨 Пикселизация</button>
+                    <button id="blurEffectBtn" class="mode-btn">🌫️ Блюр</button>
+                </div>
+            </div>
+
+            <div class="control-group" id="pixelControls">
                 <label for="pixelSize">Степень пикселизации: <span id="pixelSizeValue">62</span></label>
                 <input type="range" id="pixelSize" min="2" max="100" value="62">
+            </div>
+
+            <div class="control-group hidden" id="blurControls">
+                <label for="blurSize">Сила блюра: <span id="blurSizeValue">10</span></label>
+                <input type="range" id="blurSize" min="1" max="50" value="10">
             </div>
 
             <div class="control-group hidden" id="brushControls">
@@ -63,8 +76,14 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
 
+        const pixelEffectBtn = document.getElementById('pixelEffectBtn');
+        const blurEffectBtn = document.getElementById('blurEffectBtn');
+        const pixelControls = document.getElementById('pixelControls');
+        const blurControls = document.getElementById('blurControls');
         const pixelSizeSlider = document.getElementById('pixelSize');
         const pixelSizeValue = document.getElementById('pixelSizeValue');
+        const blurSizeSlider = document.getElementById('blurSize');
+        const blurSizeValue = document.getElementById('blurSizeValue');
         const brushControls = document.getElementById('brushControls');
         const brushBtn = document.getElementById('brushBtn');
         const eraserBtn = document.getElementById('eraserBtn');
@@ -78,11 +97,15 @@
         let currentImage = null;
         let originalImageData = null;
         let pixelatedImageData = null;
-        let maskCanvas = null;
-        let maskCtx = null;
+        let blurredImageData = null;
+        let pixelMaskCanvas = null;
+        let pixelMaskCtx = null;
+        let blurMaskCanvas = null;
+        let blurMaskCtx = null;
         let isDrawing = false;
         let brushMode = 'brush'; // 'brush' or 'eraser'
         let brushSize = 30;
+        let currentEffect = 'pixelate'; // 'pixelate' or 'blur'
         let scaleRatio = 1; // Соотношение между оригиналом и отображаемым размером
 
         // Drag & Drop
@@ -122,7 +145,9 @@
                     currentImage = img;
                     setupCanvas(img);
                     showControls();
+                    // Генерируем оба эффекта при загрузке
                     applyPixelation();
+                    applyBlur();
                 };
                 img.src = e.target.result;
             };
@@ -144,13 +169,21 @@
             // Сохраняем оригинальные данные изображения
             originalImageData = ctx.getImageData(0, 0, width, height);
 
-            // Создаем маску для выборочной пикселизации
-            maskCanvas = document.createElement('canvas');
-            maskCanvas.width = width;
-            maskCanvas.height = height;
-            maskCtx = maskCanvas.getContext('2d');
-            maskCtx.fillStyle = 'black';
-            maskCtx.fillRect(0, 0, width, height);
+            // Создаем маску для пикселизации
+            pixelMaskCanvas = document.createElement('canvas');
+            pixelMaskCanvas.width = width;
+            pixelMaskCanvas.height = height;
+            pixelMaskCtx = pixelMaskCanvas.getContext('2d');
+            pixelMaskCtx.fillStyle = 'black';
+            pixelMaskCtx.fillRect(0, 0, width, height);
+
+            // Создаем маску для блюра
+            blurMaskCanvas = document.createElement('canvas');
+            blurMaskCanvas.width = width;
+            blurMaskCanvas.height = height;
+            blurMaskCtx = blurMaskCanvas.getContext('2d');
+            blurMaskCtx.fillStyle = 'black';
+            blurMaskCtx.fillRect(0, 0, width, height);
         }
 
         // Показать элементы управления
@@ -213,25 +246,81 @@
             applyMask();
         }
 
-        // Применение маски для комбинирования оригинала и пикселизации
+        // Применение блюра с маскированием
+        function applyBlur() {
+            if (!currentImage || !originalImageData) return;
+
+            const blurSize = parseInt(blurSizeSlider.value);
+            const width = canvas.width;
+            const height = canvas.height;
+
+            // Восстанавливаем оригинал
+            ctx.putImageData(originalImageData, 0, 0);
+
+            // Если размер блюра минимальный, показываем оригинал
+            if (blurSize <= 1) {
+                return;
+            }
+
+            // Создаем временный canvas с оригинальным изображением
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            tempCtx.putImageData(originalImageData, 0, 0);
+
+            // Создаем canvas для размытой версии
+            const blurredCanvas = document.createElement('canvas');
+            const blurredCtx = blurredCanvas.getContext('2d');
+            blurredCanvas.width = width;
+            blurredCanvas.height = height;
+
+            // Применяем CSS filter для блюра, рисуя из tempCanvas
+            blurredCtx.filter = `blur(${blurSize}px)`;
+            blurredCtx.drawImage(tempCanvas, 0, 0);
+            blurredCtx.filter = 'none';
+
+            // Сохраняем размытую версию
+            blurredImageData = blurredCtx.getImageData(0, 0, width, height);
+
+            // Применяем маску
+            applyMask();
+        }
+
+        // Применение маски для комбинирования оригинала и эффектов
         function applyMask() {
-            if (!originalImageData || !pixelatedImageData || !maskCanvas) return;
+            if (!originalImageData || !pixelMaskCanvas || !blurMaskCanvas) return;
+            if (!pixelatedImageData || !blurredImageData) return;
 
             const width = canvas.width;
             const height = canvas.height;
 
             const original = originalImageData.data;
             const pixelated = pixelatedImageData.data;
-            const maskData = maskCtx.getImageData(0, 0, width, height).data;
+            const blurred = blurredImageData.data;
+            const pixelMaskData = pixelMaskCtx.getImageData(0, 0, width, height).data;
+            const blurMaskData = blurMaskCtx.getImageData(0, 0, width, height).data;
+
             const result = ctx.createImageData(width, height);
             const resultData = result.data;
 
             for (let i = 0; i < resultData.length; i += 4) {
-                const maskValue = maskData[i] / 255; // 0 = оригинал, 1 = пикселизация
+                const pixelMaskValue = pixelMaskData[i] / 255; // 0 = оригинал, 1 = пикселизация
+                const blurMaskValue = blurMaskData[i] / 255; // 0 = оригинал, 1 = блюр
 
-                resultData[i] = original[i] * (1 - maskValue) + pixelated[i] * maskValue;
-                resultData[i + 1] = original[i + 1] * (1 - maskValue) + pixelated[i + 1] * maskValue;
-                resultData[i + 2] = original[i + 2] * (1 - maskValue) + pixelated[i + 2] * maskValue;
+                // Сначала применяем пикселизацию
+                let r = original[i] * (1 - pixelMaskValue) + pixelated[i] * pixelMaskValue;
+                let g = original[i + 1] * (1 - pixelMaskValue) + pixelated[i + 1] * pixelMaskValue;
+                let b = original[i + 2] * (1 - pixelMaskValue) + pixelated[i + 2] * pixelMaskValue;
+
+                // Затем применяем блюр поверх результата
+                r = r * (1 - blurMaskValue) + blurred[i] * blurMaskValue;
+                g = g * (1 - blurMaskValue) + blurred[i + 1] * blurMaskValue;
+                b = b * (1 - blurMaskValue) + blurred[i + 2] * blurMaskValue;
+
+                resultData[i] = r;
+                resultData[i + 1] = g;
+                resultData[i + 2] = b;
                 resultData[i + 3] = original[i + 3];
             }
 
@@ -250,6 +339,8 @@
         }
 
         function drawOnMask(x, y) {
+            // Определяем на какой маске рисовать в зависимости от выбранного эффекта
+            const maskCtx = currentEffect === 'pixelate' ? pixelMaskCtx : blurMaskCtx;
             if (!maskCtx) return;
 
             maskCtx.fillStyle = brushMode === 'brush' ? 'white' : 'black';
@@ -323,6 +414,8 @@
         });
 
         clearMaskBtn.addEventListener('click', () => {
+            // Очищаем маску для текущего эффекта
+            const maskCtx = currentEffect === 'pixelate' ? pixelMaskCtx : blurMaskCtx;
             if (!maskCtx) return;
             maskCtx.fillStyle = 'black';
             maskCtx.fillRect(0, 0, canvas.width, canvas.height);
@@ -330,10 +423,29 @@
         });
 
         applyFullBtn.addEventListener('click', () => {
+            // Применяем маску ко всему изображению для текущего эффекта
+            const maskCtx = currentEffect === 'pixelate' ? pixelMaskCtx : blurMaskCtx;
             if (!maskCtx) return;
             maskCtx.fillStyle = 'white';
             maskCtx.fillRect(0, 0, canvas.width, canvas.height);
             applyMask();
+        });
+
+        // Переключение эффектов
+        pixelEffectBtn.addEventListener('click', () => {
+            currentEffect = 'pixelate';
+            pixelEffectBtn.classList.add('active');
+            blurEffectBtn.classList.remove('active');
+            pixelControls.classList.remove('hidden');
+            blurControls.classList.add('hidden');
+        });
+
+        blurEffectBtn.addEventListener('click', () => {
+            currentEffect = 'blur';
+            blurEffectBtn.classList.add('active');
+            pixelEffectBtn.classList.remove('active');
+            blurControls.classList.remove('hidden');
+            pixelControls.classList.add('hidden');
         });
 
         // Слушатели изменений
@@ -342,87 +454,115 @@
             applyPixelation();
         });
 
+        blurSizeSlider.addEventListener('input', (e) => {
+            blurSizeValue.textContent = e.target.value;
+            applyBlur();
+        });
+
         // Скачивание в оригинальном размере
         downloadBtn.addEventListener('click', () => {
             if (!currentImage) return;
 
-            // Создаем canvas для экспорта в оригинальном размере
-            const exportCanvas = document.createElement('canvas');
-            const exportCtx = exportCanvas.getContext('2d');
-
             const originalWidth = currentImage.width;
             const originalHeight = currentImage.height;
 
+            // Создаем маски в оригинальном размере
+            const exportPixelMaskCanvas = document.createElement('canvas');
+            const exportPixelMaskCtx = exportPixelMaskCanvas.getContext('2d');
+            exportPixelMaskCanvas.width = originalWidth;
+            exportPixelMaskCanvas.height = originalHeight;
+            exportPixelMaskCtx.imageSmoothingEnabled = true;
+            exportPixelMaskCtx.drawImage(pixelMaskCanvas, 0, 0, canvas.width, canvas.height,
+                                         0, 0, originalWidth, originalHeight);
+
+            const exportBlurMaskCanvas = document.createElement('canvas');
+            const exportBlurMaskCtx = exportBlurMaskCanvas.getContext('2d');
+            exportBlurMaskCanvas.width = originalWidth;
+            exportBlurMaskCanvas.height = originalHeight;
+            exportBlurMaskCtx.imageSmoothingEnabled = true;
+            exportBlurMaskCtx.drawImage(blurMaskCanvas, 0, 0, canvas.width, canvas.height,
+                                        0, 0, originalWidth, originalHeight);
+
+            // Создаем пикселизированную версию в оригинальном размере
+            const pixelSize = parseInt(pixelSizeSlider.value);
+            const scaledPixelSize = pixelSize / scaleRatio;
+            const smallWidth = Math.ceil(originalWidth / scaledPixelSize);
+            const smallHeight = Math.ceil(originalHeight / scaledPixelSize);
+
+            const tempCanvas1 = document.createElement('canvas');
+            const tempCtx1 = tempCanvas1.getContext('2d');
+            tempCanvas1.width = smallWidth;
+            tempCanvas1.height = smallHeight;
+            tempCtx1.imageSmoothingEnabled = true;
+            tempCtx1.drawImage(currentImage, 0, 0, originalWidth, originalHeight,
+                             0, 0, smallWidth, smallHeight);
+
+            const pixelatedCanvas = document.createElement('canvas');
+            const pixelatedCtx = pixelatedCanvas.getContext('2d');
+            pixelatedCanvas.width = originalWidth;
+            pixelatedCanvas.height = originalHeight;
+            pixelatedCtx.imageSmoothingEnabled = false;
+            pixelatedCtx.drawImage(tempCanvas1, 0, 0, smallWidth, smallHeight,
+                                  0, 0, originalWidth, originalHeight);
+
+            // Создаем размытую версию в оригинальном размере
+            const blurSize = parseInt(blurSizeSlider.value);
+            const scaledBlurSize = blurSize / scaleRatio;
+
+            const tempCanvas2 = document.createElement('canvas');
+            const tempCtx2 = tempCanvas2.getContext('2d');
+            tempCanvas2.width = originalWidth;
+            tempCanvas2.height = originalHeight;
+            tempCtx2.drawImage(currentImage, 0, 0, originalWidth, originalHeight);
+
+            const blurredCanvas = document.createElement('canvas');
+            const blurredCtx = blurredCanvas.getContext('2d');
+            blurredCanvas.width = originalWidth;
+            blurredCanvas.height = originalHeight;
+            blurredCtx.filter = `blur(${scaledBlurSize}px)`;
+            blurredCtx.drawImage(tempCanvas2, 0, 0);
+            blurredCtx.filter = 'none';
+
+            // Получаем все данные
+            const exportCanvas = document.createElement('canvas');
+            const exportCtx = exportCanvas.getContext('2d');
             exportCanvas.width = originalWidth;
             exportCanvas.height = originalHeight;
-
-            // Отключаем сглаживание
-            exportCtx.imageSmoothingEnabled = false;
-
-            // Рисуем оригинальное изображение в полном размере
             exportCtx.drawImage(currentImage, 0, 0, originalWidth, originalHeight);
 
-            // Если пикселизация применена
-            const pixelSize = parseInt(pixelSizeSlider.value);
-            if (pixelSize > 2) {
-                // Вычисляем размер пикселя для оригинального изображения
-                // Учитываем что pixelSize был для уменьшенного изображения
-                const scaledPixelSize = pixelSize / scaleRatio;
+            const originalData = exportCtx.getImageData(0, 0, originalWidth, originalHeight);
+            const pixelatedData = pixelatedCtx.getImageData(0, 0, originalWidth, originalHeight);
+            const blurredData = blurredCtx.getImageData(0, 0, originalWidth, originalHeight);
+            const pixelMaskData = exportPixelMaskCtx.getImageData(0, 0, originalWidth, originalHeight);
+            const blurMaskData = exportBlurMaskCtx.getImageData(0, 0, originalWidth, originalHeight);
 
-                // Создаем маску в оригинальном размере
-                const exportMaskCanvas = document.createElement('canvas');
-                const exportMaskCtx = exportMaskCanvas.getContext('2d');
-                exportMaskCanvas.width = originalWidth;
-                exportMaskCanvas.height = originalHeight;
-                exportMaskCtx.imageSmoothingEnabled = true;
+            const original = originalData.data;
+            const pixelated = pixelatedData.data;
+            const blurred = blurredData.data;
+            const pixelMask = pixelMaskData.data;
+            const blurMask = blurMaskData.data;
 
-                // Масштабируем маску до оригинального размера с сглаживанием
-                exportMaskCtx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height,
-                                       0, 0, originalWidth, originalHeight);
+            // Применяем оба эффекта с обеими масками
+            for (let i = 0; i < original.length; i += 4) {
+                const pixelMaskValue = pixelMask[i] / 255;
+                const blurMaskValue = blurMask[i] / 255;
 
-                // Создаем пикселизированную версию в оригинальном размере
-                const smallWidth = Math.ceil(originalWidth / scaledPixelSize);
-                const smallHeight = Math.ceil(originalHeight / scaledPixelSize);
+                // Сначала применяем пикселизацию
+                let r = original[i] * (1 - pixelMaskValue) + pixelated[i] * pixelMaskValue;
+                let g = original[i + 1] * (1 - pixelMaskValue) + pixelated[i + 1] * pixelMaskValue;
+                let b = original[i + 2] * (1 - pixelMaskValue) + pixelated[i + 2] * pixelMaskValue;
 
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = smallWidth;
-                tempCanvas.height = smallHeight;
-                tempCtx.imageSmoothingEnabled = true;
+                // Затем применяем блюр поверх результата
+                r = r * (1 - blurMaskValue) + blurred[i] * blurMaskValue;
+                g = g * (1 - blurMaskValue) + blurred[i + 1] * blurMaskValue;
+                b = b * (1 - blurMaskValue) + blurred[i + 2] * blurMaskValue;
 
-                // Уменьшаем оригинал
-                tempCtx.drawImage(currentImage, 0, 0, originalWidth, originalHeight,
-                                 0, 0, smallWidth, smallHeight);
-
-                const pixelatedCanvas = document.createElement('canvas');
-                const pixelatedCtx = pixelatedCanvas.getContext('2d');
-                pixelatedCanvas.width = originalWidth;
-                pixelatedCanvas.height = originalHeight;
-                pixelatedCtx.imageSmoothingEnabled = false;
-
-                // Растягиваем обратно
-                pixelatedCtx.drawImage(tempCanvas, 0, 0, smallWidth, smallHeight,
-                                      0, 0, originalWidth, originalHeight);
-
-                // Комбинируем оригинал и пикселизацию с помощью маски
-                const originalData = exportCtx.getImageData(0, 0, originalWidth, originalHeight);
-                const pixelatedData = pixelatedCtx.getImageData(0, 0, originalWidth, originalHeight);
-                const maskData = exportMaskCtx.getImageData(0, 0, originalWidth, originalHeight);
-
-                const original = originalData.data;
-                const pixelated = pixelatedData.data;
-                const mask = maskData.data;
-
-                for (let i = 0; i < original.length; i += 4) {
-                    const maskValue = mask[i] / 255;
-
-                    originalData.data[i] = Math.round(original[i] * (1 - maskValue) + pixelated[i] * maskValue);
-                    originalData.data[i + 1] = Math.round(original[i + 1] * (1 - maskValue) + pixelated[i + 1] * maskValue);
-                    originalData.data[i + 2] = Math.round(original[i + 2] * (1 - maskValue) + pixelated[i + 2] * maskValue);
-                }
-
-                exportCtx.putImageData(originalData, 0, 0);
+                originalData.data[i] = Math.round(r);
+                originalData.data[i + 1] = Math.round(g);
+                originalData.data[i + 2] = Math.round(b);
             }
+
+            exportCtx.putImageData(originalData, 0, 0);
 
             // Скачиваем
             const link = document.createElement('a');
@@ -436,16 +576,26 @@
             currentImage = null;
             originalImageData = null;
             pixelatedImageData = null;
-            maskCanvas = null;
-            maskCtx = null;
+            blurredImageData = null;
+            pixelMaskCanvas = null;
+            pixelMaskCtx = null;
+            blurMaskCanvas = null;
+            blurMaskCtx = null;
+            currentEffect = 'pixelate';
             fileInput.value = '';
             pixelSizeSlider.value = 62;
             pixelSizeValue.textContent = '62';
+            blurSizeSlider.value = 10;
+            blurSizeValue.textContent = '10';
             brushSize = 30;
             brushSizeValue.textContent = '30';
             brushMode = 'brush';
             brushBtn.classList.remove('active');
             eraserBtn.classList.remove('active');
+            pixelEffectBtn.classList.add('active');
+            blurEffectBtn.classList.remove('active');
+            pixelControls.classList.remove('hidden');
+            blurControls.classList.add('hidden');
             dropZone.classList.remove('hidden');
             canvas.style.display = 'none';
             rightPanel.classList.add('hidden');
