@@ -12,6 +12,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
     <h1 class="main-title">Jackalizer</h1>
@@ -109,11 +110,23 @@
         let pixelatedImageData = null; // Кэш для пикселизации
         let blurredImageData = null; // Кэш для блюра
         let glitchImageData = null; // Кэш для глитча
+        let glitchParams = null; // Параметры для воспроизведения глитча
         let isDrawing = false;
         let brushMode = 'brush'; // 'brush' or 'eraser'
         let brushSize = 30;
         let currentEffect = 'pixelate'; // 'pixelate' | 'blur' | 'glitch'
         let scaleRatio = 1; // Соотношение между оригиналом и отображаемым размером
+
+        // Детерминированный генератор случайных чисел
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            next() {
+                this.seed = (this.seed * 9301 + 49297) % 233280;
+                return this.seed / 233280;
+            }
+        }
 
         // Операции рисования (в порядке создания)
         let operations = []; // [{type: 'pixelate'|'blur'|'glitch', maskCanvas, maskCtx}]
@@ -179,9 +192,10 @@
             // Сохраняем оригинальные данные изображения
             originalImageData = ctx.getImageData(0, 0, width, height);
 
-            // Очищаем операции
+            // Очищаем операции и параметры
             operations = [];
             lastDrawnEffect = null;
+            glitchParams = null;
         }
 
         // Создать новую операцию
@@ -315,6 +329,10 @@
             // Копируем оригинал как базу
             result.data.set(original);
 
+            // Генерируем параметры глитча с случайным seed
+            const seed = Math.floor(Math.random() * 1000000); // Случайный seed для нового глитча
+            const rng = new SeededRandom(seed);
+
             // RGB смещение (усиленное)
             const rgbOffset = Math.floor(intensity / 2);
 
@@ -323,12 +341,58 @@
             const blocks = [];
             for (let i = 0; i < numBlocks; i++) {
                 blocks.push({
-                    y: Math.floor(Math.random() * height),
-                    height: Math.floor(Math.random() * (intensity * 2)) + 5,
-                    shift: Math.floor((Math.random() - 0.5) * intensity * 3),
-                    type: Math.random()
+                    y: Math.floor(rng.next() * height),
+                    height: Math.floor(rng.next() * (intensity * 2)) + 5,
+                    shift: Math.floor((rng.next() - 0.5) * intensity * 3),
+                    type: rng.next()
                 });
             }
+
+            // Сохраняем параметры для экспорта
+            glitchParams = {
+                seed: seed,
+                intensity: intensity,
+                rgbOffset: rgbOffset,
+                numBlocks: numBlocks,
+                blocks: blocks
+            };
+
+            // Генерируем параметры для случайных линий
+            const lineGlitches = [];
+            for (let y = 0; y < height; y++) {
+                const randomGlitch = rng.next() < (intensity / 150);
+                const lineShift = randomGlitch ? Math.floor((rng.next() - 0.5) * intensity * 2) : 0;
+                lineGlitches.push({ randomGlitch, lineShift });
+            }
+
+            // Генерируем параметры для шума
+            const noiseMap = [];
+            for (let y = 0; y < height; y++) {
+                const row = [];
+                for (let x = 0; x < width; x++) {
+                    const shouldNoise = rng.next() < 0.1;
+                    const noise = shouldNoise ? Math.floor((rng.next() - 0.5) * 100) : 0;
+                    row.push({ shouldNoise, noise });
+                }
+                noiseMap.push(row);
+            }
+
+            // Вертикальные полосы искажений
+            const numStripes = Math.floor(intensity / 8);
+            const stripes = [];
+            for (let i = 0; i < numStripes; i++) {
+                stripes.push({
+                    x: Math.floor(rng.next() * width),
+                    width: Math.floor(rng.next() * 5) + 1,
+                    shift: Math.floor((rng.next() - 0.5) * intensity)
+                });
+            }
+
+            // Сохраняем все параметры
+            glitchParams.lineGlitches = lineGlitches;
+            glitchParams.noiseMap = noiseMap;
+            glitchParams.stripes = stripes;
+            glitchParams.numStripes = numStripes;
 
             // Применяем эффекты построчно
             for (let y = 0; y < height; y++) {
@@ -343,10 +407,7 @@
                     }
                 }
 
-                // Случайные горизонтальные глитчи
-                const randomGlitch = Math.random() < (intensity / 150);
-                const lineShift = randomGlitch ? Math.floor((Math.random() - 0.5) * intensity * 2) : 0;
-
+                const { randomGlitch, lineShift } = lineGlitches[y];
                 const totalShift = blockShift + lineShift;
 
                 for (let x = 0; x < width; x++) {
@@ -384,8 +445,8 @@
                     }
 
                     // Случайный шум в глитч-линиях
-                    if (randomGlitch && Math.random() < 0.1) {
-                        const noise = Math.floor((Math.random() - 0.5) * 100);
+                    const { shouldNoise, noise } = noiseMap[y][x];
+                    if (randomGlitch && shouldNoise) {
                         result.data[i] = Math.max(0, Math.min(255, result.data[i] + noise));
                         result.data[i + 1] = Math.max(0, Math.min(255, result.data[i + 1] + noise));
                         result.data[i + 2] = Math.max(0, Math.min(255, result.data[i + 2] + noise));
@@ -393,12 +454,12 @@
                 }
             }
 
-            // Вертикальные полосы искажений
-            const numStripes = Math.floor(intensity / 8);
+            // Применяем вертикальные полосы
             for (let i = 0; i < numStripes; i++) {
-                const stripeX = Math.floor(Math.random() * width);
-                const stripeWidth = Math.floor(Math.random() * 5) + 1;
-                const stripeShift = Math.floor((Math.random() - 0.5) * intensity);
+                const stripe = stripes[i];
+                const stripeX = stripe.x;
+                const stripeWidth = stripe.width;
+                const stripeShift = stripe.shift;
 
                 for (let y = 0; y < height; y++) {
                     for (let dx = 0; dx < stripeWidth; dx++) {
@@ -669,10 +730,7 @@
             fullBlurredCtx.filter = 'none';
             const fullBlurredData = fullBlurredCtx.getImageData(0, 0, originalWidth, originalHeight);
 
-            // Создаём глитч-эффект в полном разрешении
-            const glitchIntensity = parseInt(glitchIntensitySlider.value);
-            const scaledGlitchIntensity = Math.max(1, Math.floor(glitchIntensity / scaleRatio));
-
+            // Создаём глитч-эффект в полном разрешении используя сохраненные параметры
             const tempCanvas3 = document.createElement('canvas');
             const tempCtx3 = tempCanvas3.getContext('2d');
             tempCanvas3.width = originalWidth;
@@ -683,89 +741,124 @@
             const fullGlitchData = new ImageData(originalWidth, originalHeight);
             fullGlitchData.data.set(fullOriginalData.data);
 
-            const rgbOffset = Math.floor(scaledGlitchIntensity / 2);
+            // Используем сохраненные параметры глитча
+            if (glitchParams && glitchParams.intensity > 0) {
+                const scaleX = originalWidth / canvas.width;
+                const scaleY = originalHeight / canvas.height;
 
-            // Вертикальные блоки
-            const numBlocks = Math.floor(scaledGlitchIntensity / 5);
-            const blocks = [];
-            for (let i = 0; i < numBlocks; i++) {
-                blocks.push({
-                    y: Math.floor(Math.random() * originalHeight),
-                    height: Math.floor(Math.random() * (scaledGlitchIntensity * 2)) + 5,
-                    shift: Math.floor((Math.random() - 0.5) * scaledGlitchIntensity * 3),
-                    type: Math.random()
-                });
-            }
+                const rgbOffset = glitchParams.rgbOffset;
+                const blocks = glitchParams.blocks;
 
-            for (let y = 0; y < originalHeight; y++) {
-                let blockShift = 0;
-                let blockType = 0;
-                for (const block of blocks) {
-                    if (y >= block.y && y < block.y + block.height) {
-                        blockShift = block.shift;
-                        blockType = block.type;
-                        break;
+                // Масштабируем параметры блоков для полного разрешения
+                const scaledBlocks = blocks.map(block => ({
+                    y: Math.floor(block.y * scaleY),
+                    height: Math.floor(block.height * scaleY),
+                    shift: Math.floor(block.shift * scaleX),
+                    type: block.type
+                }));
+
+                // Масштабируем линии глитчей
+                const scaledLineGlitches = [];
+                for (let y = 0; y < originalHeight; y++) {
+                    const sourceY = Math.floor(y / scaleY);
+                    if (sourceY < glitchParams.lineGlitches.length) {
+                        const original = glitchParams.lineGlitches[sourceY];
+                        scaledLineGlitches.push({
+                            randomGlitch: original.randomGlitch,
+                            lineShift: Math.floor(original.lineShift * scaleX)
+                        });
+                    } else {
+                        scaledLineGlitches.push({ randomGlitch: false, lineShift: 0 });
                     }
                 }
 
-                const randomGlitch = Math.random() < (scaledGlitchIntensity / 150);
-                const lineShift = randomGlitch ? Math.floor((Math.random() - 0.5) * scaledGlitchIntensity * 2) : 0;
-                const totalShift = blockShift + lineShift;
+                // Масштабируем карту шума
+                const scaledNoiseMap = [];
+                for (let y = 0; y < originalHeight; y++) {
+                    const row = [];
+                    const sourceY = Math.floor(y / scaleY);
+                    for (let x = 0; x < originalWidth; x++) {
+                        const sourceX = Math.floor(x / scaleX);
+                        if (sourceY < glitchParams.noiseMap.length && sourceX < glitchParams.noiseMap[sourceY].length) {
+                            row.push(glitchParams.noiseMap[sourceY][sourceX]);
+                        } else {
+                            row.push({ shouldNoise: false, noise: 0 });
+                        }
+                    }
+                    scaledNoiseMap.push(row);
+                }
 
-                for (let x = 0; x < originalWidth; x++) {
-                    const i = (y * originalWidth + x) * 4;
-
-                    const xR = Math.min(Math.max(x + rgbOffset + totalShift, 0), originalWidth - 1);
-                    const iR = (y * originalWidth + xR) * 4;
-                    const xG = Math.min(Math.max(x + totalShift, 0), originalWidth - 1);
-                    const iG = (y * originalWidth + xG) * 4;
-                    const xB = Math.min(Math.max(x - rgbOffset + totalShift, 0), originalWidth - 1);
-                    const iB = (y * originalWidth + xB) * 4;
-
-                    fullGlitchData.data[i] = fullOriginalData.data[iR];
-                    fullGlitchData.data[i + 1] = fullOriginalData.data[iG + 1];
-                    fullGlitchData.data[i + 2] = fullOriginalData.data[iB + 2];
-
-                    if (blockShift !== 0) {
-                        if (blockType < 0.3) {
-                            fullGlitchData.data[i] = 255 - fullGlitchData.data[i];
-                            fullGlitchData.data[i + 1] = 255 - fullGlitchData.data[i + 1];
-                            fullGlitchData.data[i + 2] = 255 - fullGlitchData.data[i + 2];
-                        } else if (blockType < 0.5) {
-                            fullGlitchData.data[i] = Math.min(fullGlitchData.data[i] * 1.5, 255);
-                        } else if (blockType < 0.7) {
-                            fullGlitchData.data[i + 1] = Math.min(fullGlitchData.data[i + 1] * 1.3, 255);
-                            fullGlitchData.data[i + 2] = Math.min(fullGlitchData.data[i + 2] * 1.3, 255);
+                // Применяем эффекты
+                for (let y = 0; y < originalHeight; y++) {
+                    let blockShift = 0;
+                    let blockType = 0;
+                    for (const block of scaledBlocks) {
+                        if (y >= block.y && y < block.y + block.height) {
+                            blockShift = block.shift;
+                            blockType = block.type;
+                            break;
                         }
                     }
 
-                    if (randomGlitch && Math.random() < 0.1) {
-                        const noise = Math.floor((Math.random() - 0.5) * 100);
-                        fullGlitchData.data[i] = Math.max(0, Math.min(255, fullGlitchData.data[i] + noise));
-                        fullGlitchData.data[i + 1] = Math.max(0, Math.min(255, fullGlitchData.data[i + 1] + noise));
-                        fullGlitchData.data[i + 2] = Math.max(0, Math.min(255, fullGlitchData.data[i + 2] + noise));
+                    const { randomGlitch, lineShift } = scaledLineGlitches[y];
+                    const totalShift = blockShift + lineShift;
+
+                    for (let x = 0; x < originalWidth; x++) {
+                        const i = (y * originalWidth + x) * 4;
+
+                        const xR = Math.min(Math.max(x + Math.floor(rgbOffset * scaleX) + totalShift, 0), originalWidth - 1);
+                        const iR = (y * originalWidth + xR) * 4;
+                        const xG = Math.min(Math.max(x + totalShift, 0), originalWidth - 1);
+                        const iG = (y * originalWidth + xG) * 4;
+                        const xB = Math.min(Math.max(x - Math.floor(rgbOffset * scaleX) + totalShift, 0), originalWidth - 1);
+                        const iB = (y * originalWidth + xB) * 4;
+
+                        fullGlitchData.data[i] = fullOriginalData.data[iR];
+                        fullGlitchData.data[i + 1] = fullOriginalData.data[iG + 1];
+                        fullGlitchData.data[i + 2] = fullOriginalData.data[iB + 2];
+
+                        if (blockShift !== 0) {
+                            if (blockType < 0.3) {
+                                fullGlitchData.data[i] = 255 - fullGlitchData.data[i];
+                                fullGlitchData.data[i + 1] = 255 - fullGlitchData.data[i + 1];
+                                fullGlitchData.data[i + 2] = 255 - fullGlitchData.data[i + 2];
+                            } else if (blockType < 0.5) {
+                                fullGlitchData.data[i] = Math.min(fullGlitchData.data[i] * 1.5, 255);
+                            } else if (blockType < 0.7) {
+                                fullGlitchData.data[i + 1] = Math.min(fullGlitchData.data[i + 1] * 1.3, 255);
+                                fullGlitchData.data[i + 2] = Math.min(fullGlitchData.data[i + 2] * 1.3, 255);
+                            }
+                        }
+
+                        const { shouldNoise, noise } = scaledNoiseMap[y][x];
+                        if (randomGlitch && shouldNoise) {
+                            fullGlitchData.data[i] = Math.max(0, Math.min(255, fullGlitchData.data[i] + noise));
+                            fullGlitchData.data[i + 1] = Math.max(0, Math.min(255, fullGlitchData.data[i + 1] + noise));
+                            fullGlitchData.data[i + 2] = Math.max(0, Math.min(255, fullGlitchData.data[i + 2] + noise));
+                        }
                     }
                 }
-            }
 
-            // Вертикальные полосы
-            const numStripes = Math.floor(scaledGlitchIntensity / 8);
-            for (let i = 0; i < numStripes; i++) {
-                const stripeX = Math.floor(Math.random() * originalWidth);
-                const stripeWidth = Math.floor(Math.random() * 5) + 1;
-                const stripeShift = Math.floor((Math.random() - 0.5) * scaledGlitchIntensity);
+                // Применяем вертикальные полосы используя сохраненные параметры
+                const scaledStripes = glitchParams.stripes.map(stripe => ({
+                    x: Math.floor(stripe.x * scaleX),
+                    width: Math.floor(stripe.width * scaleX) || 1,
+                    shift: Math.floor(stripe.shift * scaleY)
+                }));
 
-                for (let y = 0; y < originalHeight; y++) {
-                    for (let dx = 0; dx < stripeWidth; dx++) {
-                        const x = stripeX + dx;
-                        if (x >= 0 && x < originalWidth) {
-                            const sourceY = Math.min(Math.max(y + stripeShift, 0), originalHeight - 1);
-                            const i = (y * originalWidth + x) * 4;
-                            const iSource = (sourceY * originalWidth + x) * 4;
+                for (const stripe of scaledStripes) {
+                    for (let y = 0; y < originalHeight; y++) {
+                        for (let dx = 0; dx < stripe.width; dx++) {
+                            const x = stripe.x + dx;
+                            if (x >= 0 && x < originalWidth) {
+                                const sourceY = Math.min(Math.max(y + stripe.shift, 0), originalHeight - 1);
+                                const i = (y * originalWidth + x) * 4;
+                                const iSource = (sourceY * originalWidth + x) * 4;
 
-                            fullGlitchData.data[i] = fullOriginalData.data[iSource];
-                            fullGlitchData.data[i + 1] = fullOriginalData.data[iSource + 1];
-                            fullGlitchData.data[i + 2] = fullOriginalData.data[iSource + 2];
+                                fullGlitchData.data[i] = fullOriginalData.data[iSource];
+                                fullGlitchData.data[i + 1] = fullOriginalData.data[iSource + 1];
+                                fullGlitchData.data[i + 2] = fullOriginalData.data[iSource + 2];
+                            }
                         }
                     }
                 }
@@ -825,6 +918,7 @@
             pixelatedImageData = null;
             blurredImageData = null;
             glitchImageData = null;
+            glitchParams = null;
             operations = [];
             lastDrawnEffect = null;
             currentEffect = 'pixelate';
