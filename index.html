@@ -295,6 +295,7 @@
                 return originalImageData;
             }
 
+            // Используем быстрый CSS filter blur
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             tempCanvas.width = width;
@@ -357,24 +358,12 @@
                 blocks: blocks
             };
 
-            // Генерируем параметры для случайных линий
+            // Генерируем параметры для случайных линий (только высота, не ширина)
             const lineGlitches = [];
             for (let y = 0; y < height; y++) {
                 const randomGlitch = rng.next() < (intensity / 150);
                 const lineShift = randomGlitch ? Math.floor((rng.next() - 0.5) * intensity * 2) : 0;
                 lineGlitches.push({ randomGlitch, lineShift });
-            }
-
-            // Генерируем параметры для шума
-            const noiseMap = [];
-            for (let y = 0; y < height; y++) {
-                const row = [];
-                for (let x = 0; x < width; x++) {
-                    const shouldNoise = rng.next() < 0.1;
-                    const noise = shouldNoise ? Math.floor((rng.next() - 0.5) * 100) : 0;
-                    row.push({ shouldNoise, noise });
-                }
-                noiseMap.push(row);
             }
 
             // Вертикальные полосы искажений
@@ -388,11 +377,22 @@
                 });
             }
 
-            // Сохраняем все параметры
+            // Сохраняем параметры (без noiseMap для экономии памяти)
             glitchParams.lineGlitches = lineGlitches;
-            glitchParams.noiseMap = noiseMap;
             glitchParams.stripes = stripes;
             glitchParams.numStripes = numStripes;
+
+            // Функция для генерации шума на лету
+            function getNoise(x, y) {
+                // Простой хеш на основе координат и seed
+                const hash = ((x * 73856093) ^ (y * 19349663) ^ seed) >>> 0;
+                const pseudoRandom = (hash % 10000) / 10000;
+                if (pseudoRandom < 0.1) {
+                    const noiseHash = ((hash * 2654435761) >>> 0) % 10000;
+                    return Math.floor((noiseHash / 10000 - 0.5) * 100);
+                }
+                return 0;
+            }
 
             // Применяем эффекты построчно
             for (let y = 0; y < height; y++) {
@@ -445,11 +445,13 @@
                     }
 
                     // Случайный шум в глитч-линиях
-                    const { shouldNoise, noise } = noiseMap[y][x];
-                    if (randomGlitch && shouldNoise) {
-                        result.data[i] = Math.max(0, Math.min(255, result.data[i] + noise));
-                        result.data[i + 1] = Math.max(0, Math.min(255, result.data[i + 1] + noise));
-                        result.data[i + 2] = Math.max(0, Math.min(255, result.data[i + 2] + noise));
+                    if (randomGlitch) {
+                        const noise = getNoise(x, y);
+                        if (noise !== 0) {
+                            result.data[i] = Math.max(0, Math.min(255, result.data[i] + noise));
+                            result.data[i + 1] = Math.max(0, Math.min(255, result.data[i + 1] + noise));
+                            result.data[i + 2] = Math.max(0, Math.min(255, result.data[i + 2] + noise));
+                        }
                     }
                 }
             }
@@ -668,20 +670,29 @@
             blurControls.classList.add('hidden');
         });
 
+        // Debounce функция для оптимизации
+        let renderTimeout = null;
+        function debouncedRender() {
+            if (renderTimeout) clearTimeout(renderTimeout);
+            renderTimeout = setTimeout(() => {
+                renderCanvas();
+            }, 50); // 50ms задержка для плавности
+        }
+
         // Слушатели изменений
         pixelSizeSlider.addEventListener('input', (e) => {
             pixelSizeValue.textContent = e.target.value;
-            renderCanvas();
+            debouncedRender();
         });
 
         blurSizeSlider.addEventListener('input', (e) => {
             blurSizeValue.textContent = e.target.value;
-            renderCanvas();
+            debouncedRender();
         });
 
         glitchIntensitySlider.addEventListener('input', (e) => {
             glitchIntensityValue.textContent = e.target.value;
-            renderCanvas();
+            debouncedRender();
         });
 
         // Скачивание в оригинальном размере
@@ -721,6 +732,7 @@
             tempCanvas2.height = originalHeight;
             tempCtx2.drawImage(currentImage, 0, 0, originalWidth, originalHeight);
 
+            // Используем быстрый CSS filter blur
             const fullBlurredCanvas = document.createElement('canvas');
             const fullBlurredCtx = fullBlurredCanvas.getContext('2d');
             fullBlurredCanvas.width = originalWidth;
@@ -772,20 +784,17 @@
                     }
                 }
 
-                // Масштабируем карту шума
-                const scaledNoiseMap = [];
-                for (let y = 0; y < originalHeight; y++) {
-                    const row = [];
+                // Функция для генерации шума на основе seed и координат
+                function getNoiseForExport(x, y) {
+                    const sourceX = Math.floor(x / scaleX);
                     const sourceY = Math.floor(y / scaleY);
-                    for (let x = 0; x < originalWidth; x++) {
-                        const sourceX = Math.floor(x / scaleX);
-                        if (sourceY < glitchParams.noiseMap.length && sourceX < glitchParams.noiseMap[sourceY].length) {
-                            row.push(glitchParams.noiseMap[sourceY][sourceX]);
-                        } else {
-                            row.push({ shouldNoise: false, noise: 0 });
-                        }
+                    const hash = ((sourceX * 73856093) ^ (sourceY * 19349663) ^ glitchParams.seed) >>> 0;
+                    const pseudoRandom = (hash % 10000) / 10000;
+                    if (pseudoRandom < 0.1) {
+                        const noiseHash = ((hash * 2654435761) >>> 0) % 10000;
+                        return Math.floor((noiseHash / 10000 - 0.5) * 100);
                     }
-                    scaledNoiseMap.push(row);
+                    return 0;
                 }
 
                 // Применяем эффекты
@@ -830,11 +839,13 @@
                             }
                         }
 
-                        const { shouldNoise, noise } = scaledNoiseMap[y][x];
-                        if (randomGlitch && shouldNoise) {
-                            fullGlitchData.data[i] = Math.max(0, Math.min(255, fullGlitchData.data[i] + noise));
-                            fullGlitchData.data[i + 1] = Math.max(0, Math.min(255, fullGlitchData.data[i + 1] + noise));
-                            fullGlitchData.data[i + 2] = Math.max(0, Math.min(255, fullGlitchData.data[i + 2] + noise));
+                        if (randomGlitch) {
+                            const noise = getNoiseForExport(x, y);
+                            if (noise !== 0) {
+                                fullGlitchData.data[i] = Math.max(0, Math.min(255, fullGlitchData.data[i] + noise));
+                                fullGlitchData.data[i + 1] = Math.max(0, Math.min(255, fullGlitchData.data[i + 1] + noise));
+                                fullGlitchData.data[i + 2] = Math.max(0, Math.min(255, fullGlitchData.data[i + 2] + noise));
+                            }
                         }
                     }
                 }
