@@ -116,6 +116,41 @@
         let brushSize = 30;
         let currentEffect = 'pixelate'; // 'pixelate' | 'blur' | 'glitch'
         let scaleRatio = 1; // Соотношение между оригиналом и отображаемым размером
+        let canvasSupportsBlur = null; // Проверка поддержки CSS filter для canvas
+
+        // Проверка поддержки CSS filter: blur() для canvas
+        function checkCanvasBlurSupport() {
+            if (canvasSupportsBlur !== null) return canvasSupportsBlur;
+
+            try {
+                const testCanvas = document.createElement('canvas');
+                const testCtx = testCanvas.getContext('2d');
+                testCanvas.width = 4;
+                testCanvas.height = 4;
+
+                // Рисуем белый квадрат
+                testCtx.fillStyle = 'white';
+                testCtx.fillRect(1, 1, 2, 2);
+
+                // Применяем blur
+                const blurCanvas = document.createElement('canvas');
+                const blurCtx = blurCanvas.getContext('2d');
+                blurCanvas.width = 4;
+                blurCanvas.height = 4;
+                blurCtx.filter = 'blur(1px)';
+                blurCtx.drawImage(testCanvas, 0, 0);
+
+                // Проверяем, произошло ли размытие
+                const data = blurCtx.getImageData(0, 0, 4, 4).data;
+                // Если blur работает, углы должны быть серыми (не чисто черными)
+                canvasSupportsBlur = data[0] > 0 || data[4] > 0;
+
+                return canvasSupportsBlur;
+            } catch (e) {
+                canvasSupportsBlur = false;
+                return false;
+            }
+        }
 
         // Детерминированный генератор случайных чисел
         class SeededRandom {
@@ -284,6 +319,108 @@
             return pixelatedCtx.getImageData(0, 0, width, height);
         }
 
+        // Быстрый программный blur (для устройств без поддержки CSS filter)
+        function fastBlur(imageData, radius) {
+            const width = imageData.width;
+            const height = imageData.height;
+            const data = imageData.data;
+            const result = new Uint8ClampedArray(data);
+
+            const radiusPlus1 = radius + 1;
+
+            // Горизонтальный проход
+            for (let y = 0; y < height; y++) {
+                let r = 0, g = 0, b = 0;
+                let count = 0;
+
+                // Инициализация окна
+                for (let x = -radius; x <= radius; x++) {
+                    if (x >= 0 && x < width) {
+                        const i = (y * width + x) * 4;
+                        r += data[i];
+                        g += data[i + 1];
+                        b += data[i + 2];
+                        count++;
+                    }
+                }
+
+                // Скользящее окно
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+                    result[i] = r / count;
+                    result[i + 1] = g / count;
+                    result[i + 2] = b / count;
+                    result[i + 3] = data[i + 3];
+
+                    // Обновляем окно
+                    const leftX = x - radius;
+                    const rightX = x + radiusPlus1;
+
+                    if (leftX >= 0) {
+                        const li = (y * width + leftX) * 4;
+                        r -= data[li];
+                        g -= data[li + 1];
+                        b -= data[li + 2];
+                        count--;
+                    }
+
+                    if (rightX < width) {
+                        const ri = (y * width + rightX) * 4;
+                        r += data[ri];
+                        g += data[ri + 1];
+                        b += data[ri + 2];
+                        count++;
+                    }
+                }
+            }
+
+            // Вертикальный проход
+            const temp = new Uint8ClampedArray(result);
+            for (let x = 0; x < width; x++) {
+                let r = 0, g = 0, b = 0;
+                let count = 0;
+
+                for (let y = -radius; y <= radius; y++) {
+                    if (y >= 0 && y < height) {
+                        const i = (y * width + x) * 4;
+                        r += temp[i];
+                        g += temp[i + 1];
+                        b += temp[i + 2];
+                        count++;
+                    }
+                }
+
+                for (let y = 0; y < height; y++) {
+                    const i = (y * width + x) * 4;
+                    result[i] = r / count;
+                    result[i + 1] = g / count;
+                    result[i + 2] = b / count;
+                    result[i + 3] = temp[i + 3];
+
+                    const topY = y - radius;
+                    const bottomY = y + radiusPlus1;
+
+                    if (topY >= 0) {
+                        const ti = (topY * width + x) * 4;
+                        r -= temp[ti];
+                        g -= temp[ti + 1];
+                        b -= temp[ti + 2];
+                        count--;
+                    }
+
+                    if (bottomY < height) {
+                        const bi = (bottomY * width + x) * 4;
+                        r += temp[bi];
+                        g += temp[bi + 1];
+                        b += temp[bi + 2];
+                        count++;
+                    }
+                }
+            }
+
+            return new ImageData(result, width, height);
+        }
+
         function generateBlurredImage() {
             if (!currentImage || !originalImageData) return null;
 
@@ -295,22 +432,29 @@
                 return originalImageData;
             }
 
-            // Используем быстрый CSS filter blur
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = width;
-            tempCanvas.height = height;
-            tempCtx.putImageData(originalImageData, 0, 0);
+            // Проверяем поддержку CSS filter
+            if (checkCanvasBlurSupport()) {
+                // Используем быстрый CSS filter blur
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = width;
+                tempCanvas.height = height;
+                tempCtx.putImageData(originalImageData, 0, 0);
 
-            const blurredCanvas = document.createElement('canvas');
-            const blurredCtx = blurredCanvas.getContext('2d');
-            blurredCanvas.width = width;
-            blurredCanvas.height = height;
-            blurredCtx.filter = `blur(${blurSize}px)`;
-            blurredCtx.drawImage(tempCanvas, 0, 0);
-            blurredCtx.filter = 'none';
+                const blurredCanvas = document.createElement('canvas');
+                const blurredCtx = blurredCanvas.getContext('2d');
+                blurredCanvas.width = width;
+                blurredCanvas.height = height;
+                blurredCtx.filter = `blur(${blurSize}px)`;
+                blurredCtx.drawImage(tempCanvas, 0, 0);
+                blurredCtx.filter = 'none';
 
-            return blurredCtx.getImageData(0, 0, width, height);
+                return blurredCtx.getImageData(0, 0, width, height);
+            } else {
+                // Используем программный blur для iOS и других устройств без поддержки
+                const radius = Math.floor(blurSize / 2);
+                return fastBlur(originalImageData, radius);
+            }
         }
 
         function generateGlitchImage() {
@@ -731,16 +875,23 @@
             tempCanvas2.width = originalWidth;
             tempCanvas2.height = originalHeight;
             tempCtx2.drawImage(currentImage, 0, 0, originalWidth, originalHeight);
+            const fullOriginalBlurData = tempCtx2.getImageData(0, 0, originalWidth, originalHeight);
 
-            // Используем быстрый CSS filter blur
-            const fullBlurredCanvas = document.createElement('canvas');
-            const fullBlurredCtx = fullBlurredCanvas.getContext('2d');
-            fullBlurredCanvas.width = originalWidth;
-            fullBlurredCanvas.height = originalHeight;
-            fullBlurredCtx.filter = `blur(${scaledBlurSize}px)`;
-            fullBlurredCtx.drawImage(tempCanvas2, 0, 0);
-            fullBlurredCtx.filter = 'none';
-            const fullBlurredData = fullBlurredCtx.getImageData(0, 0, originalWidth, originalHeight);
+            // Используем CSS filter или программный blur в зависимости от поддержки
+            let fullBlurredData;
+            if (checkCanvasBlurSupport()) {
+                const fullBlurredCanvas = document.createElement('canvas');
+                const fullBlurredCtx = fullBlurredCanvas.getContext('2d');
+                fullBlurredCanvas.width = originalWidth;
+                fullBlurredCanvas.height = originalHeight;
+                fullBlurredCtx.filter = `blur(${scaledBlurSize}px)`;
+                fullBlurredCtx.drawImage(tempCanvas2, 0, 0);
+                fullBlurredCtx.filter = 'none';
+                fullBlurredData = fullBlurredCtx.getImageData(0, 0, originalWidth, originalHeight);
+            } else {
+                const scaledRadius = Math.floor(scaledBlurSize / 2);
+                fullBlurredData = fastBlur(fullOriginalBlurData, scaledRadius);
+            }
 
             // Создаём глитч-эффект в полном разрешении используя сохраненные параметры
             const tempCanvas3 = document.createElement('canvas');
