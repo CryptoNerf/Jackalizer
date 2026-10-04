@@ -33,6 +33,7 @@
         <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/></symbol>
         <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
         <symbol id="i-size" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
         <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
         <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></symbol>
         <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
@@ -86,7 +87,7 @@
                     <button id="undoBtn" class="tb-btn" title="Отменить (Ctrl+Z)" aria-label="Отменить"><svg class="icon"><use href="#i-undo"/></svg></button>
                     <button id="redoBtn" class="tb-btn" title="Вернуть (Ctrl+Shift+Z)" aria-label="Вернуть"><svg class="icon"><use href="#i-redo"/></svg></button>
                 </div>
-                <button id="compareBtn" class="tb-btn tb-compare" title="Удерживайте, чтобы увидеть оригинал (C)" aria-label="Удерживайте, чтобы увидеть оригинал">
+                <button id="compareBtn" class="tb-btn tb-compare" title="Показать оригинал: нажмите или удерживайте (C)" aria-label="Показать оригинал">
                     <svg class="icon"><use href="#i-eye"/></svg><span class="tb-text">Оригинал</span>
                 </button>
                 <div class="tb-group tb-extra">
@@ -121,9 +122,9 @@
 
         <aside class="sidebar" id="sidebar">
             <nav class="tabs" id="tabs" role="tablist">
-                <button class="tab active" data-tab="effect" role="tab">Эффект</button>
-                <button class="tab" data-tab="layers" role="tab">Слои <span class="tab-badge" id="layersBadge"></span></button>
-                <button class="tab" data-tab="export" role="tab">Сохранить</button>
+                <button class="tab active" data-tab="effect" role="tab">Эффект<svg class="icon tab-chevron"><use href="#i-chevron"/></svg></button>
+                <button class="tab" data-tab="layers" role="tab">Слои <span class="tab-badge" id="layersBadge"></span><svg class="icon tab-chevron"><use href="#i-chevron"/></svg></button>
+                <button class="tab" data-tab="export" role="tab">Сохранить<svg class="icon tab-chevron"><use href="#i-chevron"/></svg></button>
             </nav>
 
             <section class="pane active" data-pane="effect">
@@ -149,14 +150,22 @@
 
                 <div class="stamp-controls hidden" id="stampControls">
                     <div class="set-tabs" role="tablist" aria-label="Набор штампов">
-                        <button class="set-tab active" data-set="emoji" role="tab">Эмодзи</button>
+                        <button class="set-tab active" data-set="shapes" role="tab">Фигуры</button>
                         <button class="set-tab" data-set="kolobki" role="tab">Колобки</button>
                         <button class="set-tab" data-set="custom" role="tab">Свои</button>
                     </div>
                     <div class="stamp-palette" id="stampPalette"></div>
+                    <div class="color-row" id="stampColorRow">
+                        <label class="swatch swatch-custom" title="Свой цвет">
+                            <input type="color" id="stampColor" value="#000000" aria-label="Свой цвет">
+                        </label>
+                    </div>
                     <input type="file" id="brushInput" accept="image/*,.svg" multiple hidden>
-                    <label for="stampSpacing">Интервал между отпечатками <b><span id="stampSpacingValue">120</span>%</b></label>
-                    <input type="range" id="stampSpacing" min="20" max="300" value="120">
+                    <label class="inline-slider" for="stampSpacing" title="Расстояние между отпечатками при ведении кистью">
+                        <span>Интервал</span>
+                        <input type="range" id="stampSpacing" min="20" max="300" value="120">
+                        <b><span id="stampSpacingValue">120</span>%</b>
+                    </label>
                     <label class="check-row" for="stampRotate">
                         <input type="checkbox" id="stampRotate">
                         Поворачивать по направлению движения

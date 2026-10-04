@@ -582,7 +582,7 @@ body.tool-eraser .tb-check.eraser-only {
 }
 
 .amount-row label,
-.stamp-controls > label:not(.check-row) {
+.stamp-controls > label:not(.check-row):not(.inline-slider) {
     display: flex;
     justify-content: space-between;
     margin-bottom: 4px;
@@ -607,8 +607,23 @@ body.tool-eraser .tb-check.eraser-only {
     min-width: 0;
 }
 
-.stamp-controls input[type="range"] {
-    width: 100%;
+.stamp-controls .inline-slider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.inline-slider input {
+    flex: 1;
+    min-width: 0;
+}
+
+.inline-slider b {
+    min-width: 40px;
+    text-align: right;
 }
 
 /* Наборы штампов: Эмодзи / Колобки / Свои */
@@ -645,6 +660,47 @@ body.tool-eraser .tb-check.eraser-only {
     margin: 0 -5px 10px;
     padding: 5px;
     overflow-y: auto;
+}
+
+.stamp-btn.on-dark {
+    background: #5f6b77;
+}
+
+/* Цвет фигур */
+.color-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.swatch {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+}
+
+.swatch.active {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.swatch-custom {
+    overflow: hidden;
+    background: conic-gradient(#e53935, #fdd835, #43a047, #1e88e5, #ec407a, #e53935);
+}
+
+.swatch-custom input {
+    position: absolute;
+    inset: -6px;
+    width: 40px;
+    height: 40px;
+    opacity: 0;
+    cursor: pointer;
 }
 
 .palette-hint {
@@ -724,7 +780,7 @@ body.tool-eraser .tb-check.eraser-only {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 6px;
     font-size: 13px;
     color: var(--muted);
     cursor: pointer;
@@ -1261,6 +1317,24 @@ input[type="range"]::-moz-range-thumb {
         color: var(--primary-ink);
     }
 
+    /* Шеврон у активной вкладки: «свернуть» / «развернуть» панель */
+    .tab-chevron {
+        display: none;
+        width: 16px;
+        height: 16px;
+        margin-left: 4px;
+        vertical-align: -3px;
+        transition: transform 0.2s;
+    }
+
+    .tab.active .tab-chevron {
+        display: inline-block;
+    }
+
+    .sidebar.collapsed .tab.active .tab-chevron {
+        transform: rotate(180deg);
+    }
+
     .tab.active::after {
         content: '';
         position: absolute;
@@ -1345,5 +1419,16 @@ input[type="range"]::-moz-range-thumb {
 
     .stage-card {
         min-height: 300px;
+    }
+}
+
+/* Невысокие экраны ноутбуков: подсказка про порядок слоёв есть и во всплывающей подсказке ручки */
+@media (min-width: 900px) and (max-height: 800px) {
+    .pane-layers > .small {
+        display: none;
+    }
+
+    .layer-list {
+        margin-bottom: 0;
     }
 }

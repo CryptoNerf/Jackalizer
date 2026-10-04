@@ -33,7 +33,20 @@ const KOLOBKI = {
         [120, 113], [119, 111], [121, 108], [118, 110], [119, 106], [120, 108], [117, 120], [120, 116],
         [118, 117], [118, 109], [120, 107], [122, 109], [120, 116], [121, 108], [121, 109], [118, 113]]
 };
-const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+// Фигуры для штампа: SVG-контуры в своей системе координат (w×h). Контурные фигуры —
+// это внешний и внутренний контур с правилом заливки evenodd, поэтому толщина
+// обводки масштабируется вместе с фигурой
+const SHAPES = [
+    { id: 'circle', name: 'Круг', w: 100, h: 100, d: 'M50 0A50 50 0 1 1 50 100A50 50 0 1 1 50 0Z' },
+    { id: 'ring', name: 'Кольцо', w: 100, h: 100, d: 'M50 0A50 50 0 1 1 50 100A50 50 0 1 1 50 0ZM50 14A36 36 0 1 0 50 86A36 36 0 1 0 50 14Z' },
+    { id: 'square', name: 'Квадрат', w: 100, h: 100, d: 'M0 0H100V100H0Z' },
+    { id: 'frame', name: 'Рамка', w: 100, h: 100, d: 'M0 0H100V100H0ZM14 14V86H86V14Z' },
+    { id: 'triangle', name: 'Треугольник', w: 100, h: 87, d: 'M50 0L100 87H0Z' },
+    { id: 'triangle-outline', name: 'Контур треугольника', w: 100, h: 87, d: 'M50 0L100 87H0ZM50 24L20.7 75H79.3Z' },
+    { id: 'stick', name: 'Палочка', w: 100, h: 12, d: 'M6 0H94A6 6 0 0 1 94 12H6A6 6 0 0 1 6 0Z' },
+    { id: 'bar', name: 'Полоса', w: 100, h: 34, d: 'M0 0H100V34H0Z' }
+];
+const STAMP_COLORS = ['#000000', '#ffffff', '#e53935', '#fdd835', '#1e88e5', '#43a047', '#ec407a'];
 
 // ============ ЭЛЕМЕНТЫ ============
 
@@ -76,6 +89,8 @@ const eraseActiveOnly = $('eraseActiveOnly');
 const stampControls = $('stampControls');
 const stampPalette = $('stampPalette');
 const stampSetButtons = document.querySelectorAll('[data-set]');
+const stampColorRow = $('stampColorRow');
+const stampColorInput = $('stampColor');
 const brushInput = $('brushInput');
 const stampSpacing = $('stampSpacing');
 const stampRotate = $('stampRotate');
@@ -129,6 +144,7 @@ const view = { z: 1, x: 0, y: 0 };
 let spaceDown = false;
 let pointerOverCanvas = false;
 let sliderInHistory = false;   // текущее перетаскивание ползунка уже записано в историю
+let compareLocked = false;     // оригинал включён коротким нажатием и остаётся, пока не нажмут снова
 let lastPointer = null;        // последнее положение мыши над холстом (для круга кисти)
 let comparing = false;
 let busy = false;
@@ -820,10 +836,11 @@ function rebuildMasks() {
 // Кисть-штамп: встроенный эмодзи, чёрная полоса или загруженная картинка (SVG/PNG/...).
 // Мазок хранит только id кисти, поэтому при экспорте штамп перерисовывается в полном размере.
 
-// id -> {id, name, set: 'emoji'|'kolobki'|'custom', kind: 'emoji'|'bar'|'image', char, img, aspect, thumb, custom, removed}
+// id -> {id, name, set: 'shapes'|'kolobki'|'custom', kind: 'shape'|'image', path, w, h, img, aspect, thumb, custom, removed}
 const brushes = new Map();
-let currentBrushId = 'emoji:🙂';
-let stampSet = 'emoji';         // набор, показанный в палитре
+let currentBrushId = 'shape:circle';
+let stampSet = 'shapes';        // набор, показанный в палитре
+let stampColor = STAMP_COLORS[0];
 
 function brushSize(brush, size) {
     const aspect = brush.aspect || 1;
@@ -840,14 +857,13 @@ function drawStamp(c, stroke, x, y, angle) {
     c.save();
     c.setTransform(1, 0, 0, 1, t.a * x + t.e, t.d * y + t.f);
     if (angle) c.rotate(angle);
-    if (brush.kind === 'emoji') {
-        c.font = `${size * 0.85}px ${EMOJI_FONT}`;
-        c.textAlign = 'center';
-        c.textBaseline = 'middle';
-        c.fillText(brush.char, 0, size * 0.04);
-    } else if (brush.kind === 'bar') {
-        c.fillStyle = '#000';
-        c.fillRect(-size / 2, -size / 6, size, size / 3);
+    if (brush.kind === 'shape') {
+        // Векторная фигура: масштабируем контур под нужный размер
+        const { w, h } = brushSize(brush, size);
+        c.translate(-w / 2, -h / 2);
+        c.scale(w / brush.w, h / brush.h);
+        c.fillStyle = stroke.color || '#000';
+        c.fill(brush.path, 'evenodd');
     } else {
         const { w, h } = brushSize(brush, size);
         c.drawImage(brush.img, -w / 2, -h / 2, w, h);
@@ -872,7 +888,7 @@ function stampSegment(c, stroke, x0, y0, x1, y1, carry) {
 
 function makeThumb(brush) {
     const c = createCanvas(128, 128);
-    drawStamp(c.getContext('2d'), { brush: brush.id, size: 116 }, 64, 64, 0);
+    drawStamp(c.getContext('2d'), { brush: brush.id, size: 116, color: stampColor }, 64, 64, 0);
     return c.toDataURL();
 }
 
@@ -882,10 +898,47 @@ function registerBrush(brush) {
     return brush;
 }
 
-['🙂', '😎', '😂', '🐺', '⭐', '❤️', '🔥', '👍'].forEach(char => {
-    registerBrush({ id: `emoji:${char}`, name: char, set: 'emoji', kind: 'emoji', char, aspect: 1 });
+SHAPES.forEach(shape => {
+    registerBrush({
+        id: `shape:${shape.id}`,
+        name: shape.name,
+        set: 'shapes',
+        kind: 'shape',
+        path: new Path2D(shape.d),
+        w: shape.w,
+        h: shape.h,
+        aspect: shape.w / shape.h
+    });
 });
-registerBrush({ id: 'bar', name: 'Чёрная полоса', set: 'emoji', kind: 'bar', aspect: 3 });
+
+// Цвет фигур. Он сохраняется в каждом мазке, поэтому уже поставленные фигуры не перекрашиваются
+function setStampColor(color) {
+    stampColor = color.toLowerCase();
+    stampColorInput.value = stampColor;
+    for (const brush of brushes.values()) {
+        if (brush.kind === 'shape') brush.thumb = makeThumb(brush);
+    }
+    renderPalette();
+    refreshBrushCursor();
+}
+
+function isLightColor(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 200;
+}
+
+const swatches = STAMP_COLORS.map(color => {
+    const btn = document.createElement('button');
+    btn.className = 'swatch';
+    btn.style.background = color;
+    btn.dataset.color = color;
+    btn.title = color;
+    btn.setAttribute('aria-label', `Цвет ${color}`);
+    btn.addEventListener('click', () => setStampColor(color));
+    return btn;
+});
+stampColorRow.prepend(...swatches);
+stampColorInput.addEventListener('input', () => setStampColor(stampColorInput.value));
 
 // Атлас «Колобков» (~120 КБ) загружается при первом переходе в режим штампа
 let kolobkiPromise = null;
@@ -1022,7 +1075,7 @@ function removeBrush(id) {
     // Из памяти не удаляем: на кисть могут ссылаться мазки в слоях и в истории
     brush.removed = true;
     brushStore.remove(id).catch(() => {});
-    if (currentBrushId === id) currentBrushId = 'emoji:🙂';
+    if (currentBrushId === id) currentBrushId = 'shape:circle';
     renderPalette();
 }
 
@@ -1048,13 +1101,22 @@ function renderPalette() {
         btn.classList.toggle('active', on);
         btn.setAttribute('aria-selected', on);
     });
+    // Цвет есть только у фигур
+    stampColorRow.classList.toggle('hidden', stampSet !== 'shapes');
+    swatches.forEach(sw => sw.classList.toggle('active', sw.dataset.color === stampColor));
+    const customSwatch = stampColorInput.parentElement;
+    const isPreset = STAMP_COLORS.includes(stampColor);
+    customSwatch.classList.toggle('active', !isPreset);
+    customSwatch.style.background = isPreset ? '' : stampColor;
+    const lightShapes = isLightColor(stampColor);
 
     const items = [...brushes.values()].filter(b => !b.removed && b.set === stampSet).map(brush => {
         const item = document.createElement('div');
         item.className = 'stamp-item';
 
         const btn = document.createElement('button');
-        btn.className = 'stamp-btn' + (brush.id === currentBrushId ? ' active' : '');
+        btn.className = 'stamp-btn' + (brush.id === currentBrushId ? ' active' : '') +
+            (brush.kind === 'shape' && lightShapes ? ' on-dark' : '');
         btn.title = brush.name;
         btn.setAttribute('aria-label', `Штамп: ${brush.name}`);
         btn.setAttribute('aria-pressed', brush.id === currentBrushId);
@@ -1654,6 +1716,7 @@ function beginStroke(e) {
         size: brushRadius() * 2,
         spacing: stampSpacing.value / 100,
         rotate: stampRotate.checked,
+        color: stampColor,
         points: [x, y]
     } : {
         kind: tool === 'eraser' ? 'erase' : 'paint',
@@ -1753,6 +1816,10 @@ function updatePinch() {
 
 canvas.addEventListener('pointerdown', (e) => {
     if (!image || busy) return;
+    if (compareLocked) {
+        compareLocked = false;
+        setComparing(false);
+    }
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
 
@@ -1910,12 +1977,19 @@ eraserBtn.addEventListener('click', () => setTool('eraser'));
 newLayerBtn.addEventListener('click', startNewLayer);
 
 // Ползунок меняет выбранный слой; одно перетаскивание = один шаг истории
+let sliderHintShown = false;
 amountSlider.addEventListener('input', () => {
     const value = +amountSlider.value;
     amountValue.textContent = value;
     defaults[currentEffect] = value;
     const layer = getActive();
-    if (!layer) return;
+    if (!layer) {
+        if (!sliderHintShown) {
+            sliderHintShown = true;
+            toast('Сила применится к следующему мазку. Чтобы изменить готовую область, выберите её слой');
+        }
+        return;
+    }
     if (!sliderInHistory) {
         pushHistory();
         sliderInHistory = true;
@@ -1969,19 +2043,32 @@ applyFullBtn.addEventListener('click', () => {
 
 // Сравнение с оригиналом: пока кнопка зажата
 function setComparing(value) {
+    if (!value) compareLocked = false;
     if (comparing === value) return;
     comparing = value;
     compareBtn.classList.toggle('active', value);
     requestRender();
 }
 
+// Короткое нажатие включает показ оригинала до следующего нажатия,
+// удержание — показывает оригинал, пока кнопку держат
+let comparePress = null;
+
 compareBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     compareBtn.setPointerCapture(e.pointerId);
+    comparePress = { at: performance.now(), wasLocked: compareLocked };
+    compareLocked = false;
     setComparing(true);
 });
 ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => {
-    compareBtn.addEventListener(type, () => setComparing(false));
+    compareBtn.addEventListener(type, (e) => {
+        if (!comparePress) return;
+        const tap = e.type === 'pointerup' && performance.now() - comparePress.at < 300;
+        compareLocked = tap && !comparePress.wasLocked;
+        comparePress = null;
+        if (!compareLocked) setComparing(false);
+    });
 });
 compareBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -2169,6 +2256,7 @@ facesBtn.addEventListener('click', async () => {
                     size: Math.max(f.w, f.h) * 1.6,
                     spacing: 1,
                     rotate: false,
+                    color: stampColor,
                     points: [f.x + f.w / 2, f.y + f.h * 0.45]
                 });
                 return;
