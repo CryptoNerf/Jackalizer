@@ -17,8 +17,8 @@ const EFFECTS = {
     blur: { name: 'Блюр', label: 'Сила блюра', min: 1, max: 50, value: 10 },
     glitch: { name: 'Глитч', label: 'Интенсивность глитча', min: 1, max: 50, value: 15 },
     jpeg: { name: 'Шакализация', label: 'Степень шакализации', min: 1, max: 100, value: 60 },
-    // Штамп — не эффект, а картинка, отпечатанная своими цветами; ползунок — непрозрачность
-    stamp: { name: 'Штамп', label: 'Непрозрачность штампа, %', min: 10, max: 100, value: 100 }
+    // Штамп — не эффект, а картинка, отпечатанная своими цветами; силы у него нет
+    stamp: { name: 'Штамп', value: 0 }
 };
 const EFFECT_ORDER = ['pixelate', 'blur', 'glitch', 'jpeg', 'stamp'];
 
@@ -31,9 +31,18 @@ const $ = (id) => document.getElementById(id);
 
 const dropZone = $('dropZone');
 const fileInput = $('fileInput');
-const mainContainer = $('mainContainer');
-const rightPanel = $('rightPanel');
-const canvasWrap = $('canvasWrap');
+const stage = $('stage');
+const stageHint = $('stageHint');
+const toolbar = $('toolbar');
+const moreBtn = $('moreBtn');
+const sidebar = $('sidebar');
+const tabButtons = document.querySelectorAll('[data-tab]');
+const panes = document.querySelectorAll('[data-pane]');
+const layersBadge = $('layersBadge');
+const helpBtn = $('helpBtn');
+const shortcuts = $('shortcuts');
+const amountRow = $('amountRow');
+const facesLabel = $('facesLabel');
 const viewport = $('viewport');
 const canvas = $('canvas');
 const ctx = canvas.getContext('2d');
@@ -56,7 +65,6 @@ const softnessSlider = $('softness');
 const eraseActiveOnly = $('eraseActiveOnly');
 const stampControls = $('stampControls');
 const stampPalette = $('stampPalette');
-const addBrushBtn = $('addBrushBtn');
 const brushInput = $('brushInput');
 const stampSpacing = $('stampSpacing');
 const stampRotate = $('stampRotate');
@@ -125,6 +133,11 @@ function newSeed() {
 }
 
 const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+
+// Иконка из SVG-спрайта в index.html
+function icon(name) {
+    return `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+}
 
 // ============ ЭФФЕКТЫ ============
 // Все эффекты работают с ImageData и параметром s — сколько пикселей
@@ -993,7 +1006,7 @@ function renderPalette() {
         if (brush.custom) {
             const del = document.createElement('button');
             del.className = 'stamp-remove';
-            del.textContent = '✕';
+            del.innerHTML = '&#x2715;';
             del.title = `Удалить кисть «${brush.name}»`;
             del.setAttribute('aria-label', del.title);
             del.addEventListener('click', () => removeBrush(brush.id));
@@ -1001,10 +1014,19 @@ function renderPalette() {
         }
         return item;
     });
-    stampPalette.replaceChildren(...items);
-}
 
-addBrushBtn.addEventListener('click', () => brushInput.click());
+    const add = document.createElement('button');
+    add.className = 'stamp-btn stamp-add';
+    add.title = 'Загрузить свою картинку (SVG, PNG, JPG)';
+    add.setAttribute('aria-label', add.title);
+    add.innerHTML = icon('plus');
+    add.addEventListener('click', () => brushInput.click());
+    const addItem = document.createElement('div');
+    addItem.className = 'stamp-item';
+    addItem.append(add);
+
+    stampPalette.replaceChildren(...items, addItem);
+}
 brushInput.addEventListener('change', async () => {
     for (const file of Array.from(brushInput.files)) await addCustomBrush(file);
     brushInput.value = '';
@@ -1067,8 +1089,10 @@ function hasWork() {
 }
 
 function layerTitle(layer) {
-    const amount = layer.type === 'stamp' ? `${layer.amount}%` : layer.amount;
-    return `${EFFECTS[layer.type].name} · ${amount}${layer.note ? ' · ' + layer.note : ''}`;
+    const parts = [EFFECTS[layer.type].name];
+    if (layer.type !== 'stamp') parts.push(layer.amount);
+    if (layer.note) parts.push(layer.note);
+    return parts.join(' · ');
 }
 
 function selectLayer(id) {
@@ -1097,7 +1121,7 @@ function renderLayerList() {
 
         const handle = document.createElement('button');
         handle.className = 'drag-handle';
-        handle.textContent = '⋮⋮';
+        handle.innerHTML = icon('grip');
         handle.title = 'Перетащите, чтобы изменить порядок (или стрелки ↑ ↓)';
         handle.setAttribute('aria-label', `Порядок слоя ${i + 1}: стрелки вверх и вниз`);
         handle.addEventListener('pointerdown', (e) => startLayerDrag(e, li));
@@ -1116,7 +1140,8 @@ function renderLayerList() {
 
         const eye = document.createElement('button');
         eye.className = 'icon-btn';
-        eye.textContent = layer.hidden ? '🙈' : '👁';
+        eye.className = 'icon-btn';
+        eye.innerHTML = icon(layer.hidden ? 'eye-off' : 'eye');
         eye.title = layer.hidden ? 'Показать слой' : 'Скрыть слой';
         eye.setAttribute('aria-label', eye.title);
         eye.addEventListener('click', () => {
@@ -1128,7 +1153,8 @@ function renderLayerList() {
 
         const del = document.createElement('button');
         del.className = 'icon-btn';
-        del.textContent = '✕';
+        del.className = 'icon-btn';
+        del.innerHTML = icon('trash');
         del.title = 'Удалить слой';
         del.setAttribute('aria-label', del.title);
         del.addEventListener('click', () => {
@@ -1153,6 +1179,9 @@ function renderLayerList() {
 
     layerList.replaceChildren(...rows);
     newLayerBtn.disabled = activeId === null;
+    clearMaskBtn.disabled = !layers.length;
+    layersBadge.textContent = layers.length || '';
+    stageHint.hidden = layers.length > 0;
 }
 
 // Новый порядок слоёв: ids снизу вверх
@@ -1293,9 +1322,7 @@ function render() {
         if (layer.type === 'stamp') {
             // В слое штампов хранятся сами отпечатки, их просто накладываем
             below += `|${layer.id}:${effectKey(layer)}#${maskRevs.get(layer.id) || 0}`;
-            ctx.globalAlpha = layer.amount / 100;
             ctx.drawImage(getMask(layer), 0, 0);
-            ctx.globalAlpha = 1;
             continue;
         }
         const fx = below ? getStackedEffect(layer, below) : getPreviewEffect(layer);
@@ -1371,7 +1398,7 @@ function setImage(img) {
 
     canvas.width = tmpCanvas.width = pw;
     canvas.height = tmpCanvas.height = ph;
-    canvasWrap.style.setProperty('--ar', pw / ph);
+    stage.style.setProperty('--ar', pw / ph);
 
     srcCanvas = createCanvas(pw, ph);
     const srcCtx = srcCanvas.getContext('2d');
@@ -1381,10 +1408,9 @@ function setImage(img) {
 
     clearDocument();
 
-    dropZone.classList.add('hidden');
-    canvasWrap.classList.remove('hidden');
-    rightPanel.classList.remove('hidden');
-    mainContainer.classList.add('two-panels');
+    document.body.classList.add('editing');
+    view.z = 1;
+    fitCanvas();
     setView(1, 0, 0);
     syncControls();
     changed();
@@ -1399,10 +1425,7 @@ function resetApp() {
     clearDocument();
     fileInput.value = '';
 
-    dropZone.classList.remove('hidden');
-    canvasWrap.classList.add('hidden');
-    rightPanel.classList.add('hidden');
-    mainContainer.classList.remove('two-panels');
+    document.body.classList.remove('editing');
 }
 
 dropZone.addEventListener('click', () => fileInput.click());
@@ -1448,6 +1471,25 @@ document.addEventListener('paste', (e) => {
 });
 
 // ============ МАСШТАБ ============
+
+// Холст вписывается в рабочее поле целиком (как object-fit: contain)
+function fitCanvas() {
+    if (!image) return;
+    const style = getComputedStyle(stage);
+    const w = stage.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const h = stage.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+    if (w <= 0 || h <= 0) return;
+    const scale = Math.min(w / pw, h / ph);
+    const oldWidth = canvas.offsetWidth;
+    const width = Math.max(1, Math.floor(pw * scale));
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${Math.max(1, Math.floor(ph * scale))}px`;
+    // Сохраняем увеличенный участок при изменении размера окна
+    const k = oldWidth ? width / oldWidth : 1;
+    setView(view.z, view.x * k, view.y * k);
+}
+
+new ResizeObserver(fitCanvas).observe(stage);
 
 function setView(z, x, y) {
     z = clamp(z, 1, ZOOM_MAX);
@@ -1726,16 +1768,20 @@ function syncControls() {
 
     const info = EFFECTS[currentEffect];
     const active = getActive();
-    amountSlider.min = info.min;
-    amountSlider.max = info.max;
-    amountSlider.value = active ? active.amount : defaults[currentEffect];
-    amountLabel.textContent = info.label;
-    amountValue.textContent = amountSlider.value;
+    const isStamp = currentEffect === 'stamp';
+    amountRow.classList.toggle('hidden', isStamp);
+    if (!isStamp) {
+        amountSlider.min = info.min;
+        amountSlider.max = info.max;
+        amountSlider.value = active ? active.amount : defaults[currentEffect];
+        amountLabel.textContent = info.label;
+        amountValue.textContent = amountSlider.value;
+    }
     reseedBtn.classList.toggle('hidden', currentEffect !== 'glitch');
     reseedBtn.disabled = !(active && active.type === 'glitch');
-    stampControls.classList.toggle('hidden', currentEffect !== 'stamp');
-    applyFullBtn.disabled = currentEffect === 'stamp';
-    facesBtn.textContent = currentEffect === 'stamp' ? '🙂 Найти лица и закрыть штампом' : '🙂 Найти и скрыть лица';
+    stampControls.classList.toggle('hidden', !isStamp);
+    applyFullBtn.classList.toggle('hidden', isStamp);
+    updateFacesLabel();
 
     renderLayerList();
     refreshBrushCursor();
@@ -1750,6 +1796,7 @@ function setEffect(effect) {
 
 function setTool(value) {
     tool = value;
+    document.body.classList.toggle('tool-eraser', tool === 'eraser');
     refreshBrushCursor();
     brushBtn.classList.toggle('active', tool === 'brush');
     eraserBtn.classList.toggle('active', tool === 'eraser');
@@ -1854,6 +1901,40 @@ compareBtn.addEventListener('pointerdown', (e) => {
 compareBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
 resetBtn.addEventListener('click', resetApp);
+
+// Вкладки на узких экранах. Повторное нажатие сворачивает панель — картинке больше места
+function showTab(name) {
+    const collapse = sidebar.dataset.current === name && !sidebar.classList.contains('collapsed');
+    sidebar.dataset.current = name;
+    sidebar.classList.toggle('collapsed', collapse);
+    tabButtons.forEach(tab => {
+        const on = tab.dataset.tab === name;
+        tab.classList.toggle('active', on);
+        tab.setAttribute('aria-selected', on && !collapse);
+    });
+    panes.forEach(pane => pane.classList.toggle('active', pane.dataset.pane === name));
+}
+
+sidebar.dataset.current = 'effect';
+tabButtons.forEach(tab => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
+
+moreBtn.addEventListener('click', () => {
+    const expanded = toolbar.classList.toggle('expanded');
+    moreBtn.classList.toggle('active', expanded);
+    moreBtn.setAttribute('aria-expanded', expanded);
+});
+
+helpBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = shortcuts.classList.toggle('hidden') === false;
+    helpBtn.setAttribute('aria-expanded', open);
+});
+document.addEventListener('click', (e) => {
+    if (!shortcuts.classList.contains('hidden') && !shortcuts.contains(e.target)) {
+        shortcuts.classList.add('hidden');
+        helpBtn.setAttribute('aria-expanded', false);
+    }
+});
 
 // ============ ПОИСК ЛИЦ ============
 
@@ -1965,15 +2046,25 @@ async function detectFaces(api) {
     return faces;
 }
 
+let facesStatus = '';
+
+function updateFacesLabel() {
+    facesLabel.textContent = facesStatus || (currentEffect === 'stamp' ? 'Закрыть лица штампом' : 'Найти лица');
+}
+
+function setFacesStatus(text) {
+    facesStatus = text;
+    updateFacesLabel();
+}
+
 facesBtn.addEventListener('click', async () => {
     if (!image || detecting || busy) return;
     detecting = true;
-    const label = facesBtn.textContent;
     facesBtn.disabled = true;
-    facesBtn.textContent = faceApiPromise ? 'Поиск лиц…' : 'Загрузка модели…';
+    setFacesStatus(faceApiPromise ? 'Поиск лиц…' : 'Загрузка модели…');
     try {
         const api = await loadFaceApi();
-        facesBtn.textContent = 'Поиск лиц…';
+        setFacesStatus('Поиск лиц…');
         await nextFrame();
         const faces = await detectFaces(api);
         if (!faces.length) {
@@ -2017,7 +2108,7 @@ facesBtn.addEventListener('click', async () => {
     } finally {
         detecting = false;
         facesBtn.disabled = false;
-        facesBtn.textContent = label;
+        setFacesStatus('');
     }
 });
 
@@ -2130,9 +2221,7 @@ async function renderFullSize(type) {
             layer.strokes.forEach(stroke => replayStroke(maskCtx, stroke));
 
             if (layer.type === 'stamp') {
-                outCtx.globalAlpha = layer.amount / 100;
                 outCtx.drawImage(mask, 0, 0);
-                outCtx.globalAlpha = 1;
                 continue;
             }
 
@@ -2185,8 +2274,9 @@ const exportButtons = [downloadBtn, shareBtn, copyBtn, resetBtn];
 async function runBusy(btn, task) {
     if (busy || !image) return;
     busy = true;
-    const label = btn.textContent;
-    btn.textContent = 'Обработка…';
+    const labelEl = btn.querySelector('span') || btn;
+    const label = labelEl.textContent;
+    labelEl.textContent = 'Обработка…';
     exportButtons.forEach(b => { b.disabled = true; });
     try {
         await task();
@@ -2197,7 +2287,7 @@ async function runBusy(btn, task) {
         }
     } finally {
         busy = false;
-        btn.textContent = label;
+        labelEl.textContent = label;
         exportButtons.forEach(b => { b.disabled = false; });
     }
 }
