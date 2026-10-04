@@ -470,7 +470,7 @@ body.tool-eraser .tb-check.eraser-only {
 
 .pane-layers {
     flex: 1;
-    min-height: 120px;
+    min-height: 98px;
     display: flex;
     flex-direction: column;
 }
@@ -611,11 +611,53 @@ body.tool-eraser .tb-check.eraser-only {
     width: 100%;
 }
 
+/* Наборы штампов: Эмодзи / Колобки / Свои */
+.set-tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 8px;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--field);
+}
+
+.set-tab {
+    flex: 1;
+    height: 28px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.set-tab.active {
+    background: white;
+    color: var(--primary-ink);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* Палитра прокручивается внутри себя, чтобы панель не росла */
 .stamp-palette {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
     gap: 6px;
-    margin-bottom: 12px;
+    max-height: clamp(106px, calc(100vh - 620px), 164px);
+    margin: 0 -5px 10px;
+    padding: 5px;
+    overflow-y: auto;
+}
+
+.palette-hint {
+    grid-column: 1 / -1;
+    align-self: center;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.link-btn {
+    color: var(--primary-ink);
+    font-weight: 600;
+    text-decoration: underline;
 }
 
 .stamp-item {

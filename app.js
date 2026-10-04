@@ -23,6 +23,16 @@ const EFFECTS = {
 const EFFECT_ORDER = ['pixelate', 'blur', 'glitch', 'jpeg', 'stamp'];
 
 const BRUSH_FILE_LIMIT = 15 * 1024 * 1024;
+
+// Набор штампов «Колобки»: атлас 6×4 ячеек по 128px, штамп — в левом верхнем углу ячейки
+const KOLOBKI = {
+    url: 'img/stamps-kolobki.webp',
+    cell: 128,
+    columns: 6,
+    sizes: [[118, 104], [120, 108], [120, 106], [120, 111], [121, 118], [117, 111], [118, 115], [115, 116],
+        [120, 113], [119, 111], [121, 108], [118, 110], [119, 106], [120, 108], [117, 120], [120, 116],
+        [118, 117], [118, 109], [120, 107], [122, 109], [120, 116], [121, 108], [121, 109], [118, 113]]
+};
 const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
 // ============ ЭЛЕМЕНТЫ ============
@@ -65,6 +75,7 @@ const softnessSlider = $('softness');
 const eraseActiveOnly = $('eraseActiveOnly');
 const stampControls = $('stampControls');
 const stampPalette = $('stampPalette');
+const stampSetButtons = document.querySelectorAll('[data-set]');
 const brushInput = $('brushInput');
 const stampSpacing = $('stampSpacing');
 const stampRotate = $('stampRotate');
@@ -809,8 +820,10 @@ function rebuildMasks() {
 // Кисть-штамп: встроенный эмодзи, чёрная полоса или загруженная картинка (SVG/PNG/...).
 // Мазок хранит только id кисти, поэтому при экспорте штамп перерисовывается в полном размере.
 
-const brushes = new Map();     // id -> {id, name, kind: 'emoji'|'bar'|'image', char, img, aspect, thumb, custom, removed}
+// id -> {id, name, set: 'emoji'|'kolobki'|'custom', kind: 'emoji'|'bar'|'image', char, img, aspect, thumb, custom, removed}
+const brushes = new Map();
 let currentBrushId = 'emoji:🙂';
+let stampSet = 'emoji';         // набор, показанный в палитре
 
 function brushSize(brush, size) {
     const aspect = brush.aspect || 1;
@@ -870,9 +883,42 @@ function registerBrush(brush) {
 }
 
 ['🙂', '😎', '😂', '🐺', '⭐', '❤️', '🔥', '👍'].forEach(char => {
-    registerBrush({ id: `emoji:${char}`, name: char, kind: 'emoji', char, aspect: 1 });
+    registerBrush({ id: `emoji:${char}`, name: char, set: 'emoji', kind: 'emoji', char, aspect: 1 });
 });
-registerBrush({ id: 'bar', name: 'Чёрная полоса', kind: 'bar', aspect: 3 });
+registerBrush({ id: 'bar', name: 'Чёрная полоса', set: 'emoji', kind: 'bar', aspect: 3 });
+
+// Атлас «Колобков» (~120 КБ) загружается при первом переходе в режим штампа
+let kolobkiPromise = null;
+
+function loadKolobki() {
+    if (!kolobkiPromise) {
+        kolobkiPromise = (async () => {
+            const img = new Image();
+            img.src = KOLOBKI.url;
+            await img.decode();
+            KOLOBKI.sizes.forEach(([w, h], i) => {
+                const tile = createCanvas(w, h);
+                const x = (i % KOLOBKI.columns) * KOLOBKI.cell;
+                const y = Math.floor(i / KOLOBKI.columns) * KOLOBKI.cell;
+                tile.getContext('2d').drawImage(img, x, y, w, h, 0, 0, w, h);
+                registerBrush({
+                    id: `kolobok:${i + 1}`,
+                    name: `Колобок ${i + 1}`,
+                    set: 'kolobki',
+                    kind: 'image',
+                    img: tile,
+                    aspect: w / h
+                });
+            });
+            renderPalette();
+        })();
+        kolobkiPromise.catch(() => {
+            kolobkiPromise = null;
+            if (stampSet === 'kolobki') renderPalette();
+        });
+    }
+    return kolobkiPromise;
+}
 
 // SVG без размеров браузеры рисуют по-разному (или не рисуют вовсе), поэтому
 // проставляем явные width/height с крупным внутренним размером и viewBox
@@ -914,6 +960,7 @@ async function brushFromBlob(record) {
     return registerBrush({
         id: record.id,
         name: record.name,
+        set: 'custom',
         kind: 'image',
         img,
         aspect: img.naturalWidth / img.naturalHeight,
@@ -981,13 +1028,28 @@ function removeBrush(id) {
 
 function selectBrush(id) {
     currentBrushId = id;
+    stampSet = brushes.get(id).set;
     if (currentEffect !== 'stamp') setEffect('stamp');
     renderPalette();
     refreshBrushCursor();
 }
 
+function showStampSet(set) {
+    stampSet = set;
+    if (set === 'kolobki') loadKolobki();
+    renderPalette();
+}
+
+stampSetButtons.forEach(btn => btn.addEventListener('click', () => showStampSet(btn.dataset.set)));
+
 function renderPalette() {
-    const items = [...brushes.values()].filter(b => !b.removed).map(brush => {
+    stampSetButtons.forEach(btn => {
+        const on = btn.dataset.set === stampSet;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-selected', on);
+    });
+
+    const items = [...brushes.values()].filter(b => !b.removed && b.set === stampSet).map(brush => {
         const item = document.createElement('div');
         item.className = 'stamp-item';
 
@@ -1015,17 +1077,39 @@ function renderPalette() {
         return item;
     });
 
-    const add = document.createElement('button');
-    add.className = 'stamp-btn stamp-add';
-    add.title = 'Загрузить свою картинку (SVG, PNG, JPG)';
-    add.setAttribute('aria-label', add.title);
-    add.innerHTML = icon('plus');
-    add.addEventListener('click', () => brushInput.click());
-    const addItem = document.createElement('div');
-    addItem.className = 'stamp-item';
-    addItem.append(add);
+    if (stampSet === 'custom') {
+        // Своя картинка добавляется плиткой «+» в конце набора «Свои»
+        const add = document.createElement('button');
+        add.className = 'stamp-btn stamp-add';
+        add.title = 'Загрузить свою картинку (SVG, PNG, JPG)';
+        add.setAttribute('aria-label', add.title);
+        add.innerHTML = icon('plus');
+        add.addEventListener('click', () => brushInput.click());
+        const addItem = document.createElement('div');
+        addItem.className = 'stamp-item';
+        addItem.append(add);
+        items.push(addItem);
+        if (items.length === 1) {
+            const hint = document.createElement('p');
+            hint.className = 'palette-hint';
+            hint.textContent = 'Загрузите свою картинку: SVG, PNG или JPG. Прозрачный фон сохранится.';
+            items.push(hint);
+        }
+    } else if (stampSet === 'kolobki' && !items.length) {
+        const hint = document.createElement('p');
+        hint.className = 'palette-hint';
+        hint.textContent = kolobkiPromise ? 'Загрузка…' : 'Не удалось загрузить набор. ';
+        if (!kolobkiPromise) {
+            const retry = document.createElement('button');
+            retry.className = 'link-btn';
+            retry.textContent = 'Повторить';
+            retry.addEventListener('click', () => showStampSet('kolobki'));
+            hint.append(retry);
+        }
+        items.push(hint);
+    }
 
-    stampPalette.replaceChildren(...items, addItem);
+    stampPalette.replaceChildren(...items);
 }
 brushInput.addEventListener('change', async () => {
     for (const file of Array.from(brushInput.files)) await addCustomBrush(file);
@@ -1780,6 +1864,7 @@ function syncControls() {
     reseedBtn.classList.toggle('hidden', currentEffect !== 'glitch');
     reseedBtn.disabled = !(active && active.type === 'glitch');
     stampControls.classList.toggle('hidden', !isStamp);
+    if (isStamp) loadKolobki().catch(() => {});
     applyFullBtn.classList.toggle('hidden', isStamp);
     updateFacesLabel();
 
