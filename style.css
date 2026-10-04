@@ -157,6 +157,70 @@ body.dragging .canvas-wrap canvas {
     grid-template-columns: 1fr 1fr;
 }
 
+.effect-grid .wide {
+    grid-column: 1 / -1;
+}
+
+.stamp-palette {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 8px;
+}
+
+.stamp-item {
+    position: relative;
+}
+
+.stamp-palette .stamp-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1;
+    padding: 6px;
+    background: #f5f5f5;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+}
+
+.stamp-palette .stamp-btn.active {
+    background: #e3eef8;
+    border-color: #6ba3d4;
+}
+
+.stamp-btn img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.stamp-palette .stamp-remove {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border-radius: 50%;
+    background: #666;
+    font-size: 11px;
+    line-height: 20px;
+}
+
+@media (hover: hover) {
+    .stamp-palette .stamp-btn:hover:not(.active) {
+        background: #eaeaea;
+        transform: none;
+        box-shadow: none;
+    }
+
+    .stamp-palette .stamp-remove:hover {
+        background: #b3261e;
+        transform: none;
+    }
+}
+
 .faces-btn {
     width: 100%;
     padding: 12px;
@@ -451,6 +515,15 @@ canvas {
 
 .brush-cursor.visible {
     display: block;
+}
+
+/* В режиме штампа под курсором — полупрозрачный отпечаток */
+.brush-cursor.stamp {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: center / contain no-repeat;
+    opacity: 0.6;
 }
 
 .canvas-hint {

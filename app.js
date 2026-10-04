@@ -16,9 +16,14 @@ const EFFECTS = {
     pixelate: { name: 'Пикселизация', label: 'Степень пикселизации', min: 2, max: 100, value: 62 },
     blur: { name: 'Блюр', label: 'Сила блюра', min: 1, max: 50, value: 10 },
     glitch: { name: 'Глитч', label: 'Интенсивность глитча', min: 1, max: 50, value: 15 },
-    jpeg: { name: 'Шакализация', label: 'Степень шакализации', min: 1, max: 100, value: 60 }
+    jpeg: { name: 'Шакализация', label: 'Степень шакализации', min: 1, max: 100, value: 60 },
+    // Штамп — не эффект, а картинка, отпечатанная своими цветами; ползунок — непрозрачность
+    stamp: { name: 'Штамп', label: 'Непрозрачность штампа, %', min: 10, max: 100, value: 100 }
 };
-const EFFECT_ORDER = ['pixelate', 'blur', 'glitch', 'jpeg'];
+const EFFECT_ORDER = ['pixelate', 'blur', 'glitch', 'jpeg', 'stamp'];
+
+const BRUSH_FILE_LIMIT = 15 * 1024 * 1024;
+const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
 
 // ============ ЭЛЕМЕНТЫ ============
 
@@ -49,6 +54,12 @@ const eraserBtn = $('eraserBtn');
 const brushSizeSlider = $('brushSize');
 const softnessSlider = $('softness');
 const eraseActiveOnly = $('eraseActiveOnly');
+const stampControls = $('stampControls');
+const stampPalette = $('stampPalette');
+const addBrushBtn = $('addBrushBtn');
+const brushInput = $('brushInput');
+const stampSpacing = $('stampSpacing');
+const stampRotate = $('stampRotate');
 const undoBtn = $('undoBtn');
 const redoBtn = $('redoBtn');
 const compareBtn = $('compareBtn');
@@ -694,6 +705,10 @@ function softFill(c, r, hardness) {
 }
 
 function drawDab(c, stroke, x, y) {
+    if (stroke.kind === 'stamp') {
+        drawStamp(c, stroke, x, y, 0);
+        return;
+    }
     c.save();
     c.translate(x, y);
     c.fillStyle = softFill(c, stroke.r, stroke.hardness);
@@ -716,6 +731,7 @@ function drawEllipse(c, stroke) {
 
 // Рисует отрезок мазка; carry — расстояние от последнего отпечатка мягкой кисти
 function drawSegment(c, stroke, x0, y0, x1, y1, carry) {
+    if (stroke.kind === 'stamp') return stampSegment(c, stroke, x0, y0, x1, y1, carry);
     if (stroke.hardness >= 1) {
         c.lineCap = 'round';
         c.lineWidth = stroke.r * 2;
@@ -776,6 +792,244 @@ function rebuildMasks() {
     }
 }
 
+// ============ ШТАМПЫ ============
+// Кисть-штамп: встроенный эмодзи, чёрная полоса или загруженная картинка (SVG/PNG/...).
+// Мазок хранит только id кисти, поэтому при экспорте штамп перерисовывается в полном размере.
+
+const brushes = new Map();     // id -> {id, name, kind: 'emoji'|'bar'|'image', char, img, aspect, thumb, custom, removed}
+let currentBrushId = 'emoji:🙂';
+
+function brushSize(brush, size) {
+    const aspect = brush.aspect || 1;
+    return aspect >= 1 ? { w: size, h: size / aspect } : { w: size * aspect, h: size };
+}
+
+// Рисует один отпечаток с центром в (x, y). Работаем в пикселях самого холста
+// (без масштабирующего преобразования), чтобы SVG и эмодзи были чёткими и при экспорте.
+function drawStamp(c, stroke, x, y, angle) {
+    const brush = brushes.get(stroke.brush);
+    if (!brush) return;
+    const t = c.getTransform();
+    const size = stroke.size * t.a;
+    c.save();
+    c.setTransform(1, 0, 0, 1, t.a * x + t.e, t.d * y + t.f);
+    if (angle) c.rotate(angle);
+    if (brush.kind === 'emoji') {
+        c.font = `${size * 0.85}px ${EMOJI_FONT}`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText(brush.char, 0, size * 0.04);
+    } else if (brush.kind === 'bar') {
+        c.fillStyle = '#000';
+        c.fillRect(-size / 2, -size / 6, size, size / 3);
+    } else {
+        const { w, h } = brushSize(brush, size);
+        c.drawImage(brush.img, -w / 2, -h / 2, w, h);
+    }
+    c.restore();
+}
+
+// Отпечатки вдоль отрезка с заданным интервалом; carry — путь от последнего отпечатка
+function stampSegment(c, stroke, x0, y0, x1, y1, carry) {
+    const spacing = Math.max(1, stroke.size * stroke.spacing);
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len = Math.hypot(dx, dy);
+    const angle = stroke.rotate ? Math.atan2(dy, dx) : 0;
+    let t = spacing - carry;
+    while (t <= len) {
+        drawStamp(c, stroke, x0 + dx * t / len, y0 + dy * t / len, angle);
+        t += spacing;
+    }
+    return len - (t - spacing);
+}
+
+function makeThumb(brush) {
+    const c = createCanvas(128, 128);
+    drawStamp(c.getContext('2d'), { brush: brush.id, size: 116 }, 64, 64, 0);
+    return c.toDataURL();
+}
+
+function registerBrush(brush) {
+    brushes.set(brush.id, brush);
+    brush.thumb = makeThumb(brush);
+    return brush;
+}
+
+['🙂', '😎', '😂', '🐺', '⭐', '❤️', '🔥', '👍'].forEach(char => {
+    registerBrush({ id: `emoji:${char}`, name: char, kind: 'emoji', char, aspect: 1 });
+});
+registerBrush({ id: 'bar', name: 'Чёрная полоса', kind: 'bar', aspect: 3 });
+
+// SVG без размеров браузеры рисуют по-разному (или не рисуют вовсе), поэтому
+// проставляем явные width/height с крупным внутренним размером и viewBox
+async function normalizeSvg(blob) {
+    const doc = new DOMParser().parseFromString(await blob.text(), 'image/svg+xml');
+    const svg = doc.documentElement;
+    if (svg.nodeName.toLowerCase() !== 'svg' || doc.getElementsByTagName('parsererror').length) {
+        throw new Error('invalid svg');
+    }
+    const attr = (name) => svg.getAttribute(name) || '';
+    let w = parseFloat(attr('width'));
+    let h = parseFloat(attr('height'));
+    const box = attr('viewBox').split(/[\s,]+/).map(Number);
+    if (!(w > 0) || !(h > 0) || attr('width').includes('%') || attr('height').includes('%')) {
+        [w, h] = box.length === 4 && box[2] > 0 && box[3] > 0 ? [box[2], box[3]] : [512, 512];
+    }
+    if (!attr('viewBox')) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    const k = 2048 / Math.max(w, h);
+    svg.setAttribute('width', w * k);
+    svg.setAttribute('height', h * k);
+    return new Blob([new XMLSerializer().serializeToString(doc)], { type: 'image/svg+xml' });
+}
+
+async function brushFromBlob(record) {
+    const url = URL.createObjectURL(record.blob);
+    const img = new Image();
+    try {
+        img.src = url;
+        await img.decode();
+        if (!img.naturalWidth || !img.naturalHeight) throw new Error('empty image');
+        // Некоторые SVG (с HTML внутри) «загрязняют» холст — тогда нельзя сохранить результат
+        const test = createCanvas(2, 2).getContext('2d');
+        test.drawImage(img, 0, 0, 2, 2);
+        test.getImageData(0, 0, 1, 1);
+    } catch (err) {
+        URL.revokeObjectURL(url);
+        throw err;
+    }
+    return registerBrush({
+        id: record.id,
+        name: record.name,
+        kind: 'image',
+        img,
+        aspect: img.naturalWidth / img.naturalHeight,
+        custom: true
+    });
+}
+
+// Свои кисти сохраняются в браузере (IndexedDB) и доступны после перезагрузки
+const brushStore = (() => {
+    let dbPromise = null;
+    const open = () => dbPromise || (dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open('jackalizer', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('brushes', { keyPath: 'id' });
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    }));
+    const run = async (mode, action) => {
+        const db = await open();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction('brushes', mode);
+            const req = action(tx.objectStore('brushes'));
+            tx.oncomplete = () => resolve(req.result);
+            tx.onerror = () => reject(tx.error);
+        });
+    };
+    return {
+        all: () => run('readonly', store => store.getAll()),
+        put: (record) => run('readwrite', store => store.put(record)),
+        remove: (id) => run('readwrite', store => store.delete(id))
+    };
+})();
+
+async function addCustomBrush(file) {
+    if (file.size > BRUSH_FILE_LIMIT) {
+        toast(`«${file.name}» больше 15 МБ — выберите файл поменьше`, true);
+        return;
+    }
+    const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+    try {
+        const blob = isSvg ? await normalizeSvg(file) : file;
+        const record = {
+            id: `custom:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            name: file.name.replace(/\.[^.]+$/, ''),
+            blob,
+            created: Date.now()
+        };
+        const brush = await brushFromBlob(record);
+        brushStore.put(record).catch(() => toast('Кисть добавлена, но не сохранится после перезагрузки'));
+        selectBrush(brush.id);
+    } catch (err) {
+        console.error(err);
+        toast(`Не удалось использовать «${file.name}» как кисть`, true);
+    }
+}
+
+function removeBrush(id) {
+    const brush = brushes.get(id);
+    if (!brush || !brush.custom) return;
+    // Из памяти не удаляем: на кисть могут ссылаться мазки в слоях и в истории
+    brush.removed = true;
+    brushStore.remove(id).catch(() => {});
+    if (currentBrushId === id) currentBrushId = 'emoji:🙂';
+    renderPalette();
+}
+
+function selectBrush(id) {
+    currentBrushId = id;
+    if (currentEffect !== 'stamp') setEffect('stamp');
+    renderPalette();
+    refreshBrushCursor();
+}
+
+function renderPalette() {
+    const items = [...brushes.values()].filter(b => !b.removed).map(brush => {
+        const item = document.createElement('div');
+        item.className = 'stamp-item';
+
+        const btn = document.createElement('button');
+        btn.className = 'stamp-btn' + (brush.id === currentBrushId ? ' active' : '');
+        btn.title = brush.name;
+        btn.setAttribute('aria-label', `Штамп: ${brush.name}`);
+        btn.setAttribute('aria-pressed', brush.id === currentBrushId);
+        const img = document.createElement('img');
+        img.src = brush.thumb;
+        img.alt = '';
+        btn.append(img);
+        btn.addEventListener('click', () => selectBrush(brush.id));
+        item.append(btn);
+
+        if (brush.custom) {
+            const del = document.createElement('button');
+            del.className = 'stamp-remove';
+            del.textContent = '✕';
+            del.title = `Удалить кисть «${brush.name}»`;
+            del.setAttribute('aria-label', del.title);
+            del.addEventListener('click', () => removeBrush(brush.id));
+            item.append(del);
+        }
+        return item;
+    });
+    stampPalette.replaceChildren(...items);
+}
+
+addBrushBtn.addEventListener('click', () => brushInput.click());
+brushInput.addEventListener('change', async () => {
+    for (const file of Array.from(brushInput.files)) await addCustomBrush(file);
+    brushInput.value = '';
+});
+stampSpacing.addEventListener('input', () => {
+    $('stampSpacingValue').textContent = stampSpacing.value;
+});
+
+async function loadSavedBrushes() {
+    try {
+        const records = await brushStore.all();
+        records.sort((a, b) => a.created - b.created);
+        for (const record of records) {
+            try {
+                await brushFromBlob(record);
+            } catch (err) {
+                console.warn('Кисть не загрузилась:', record.name, err);
+            }
+        }
+    } catch (err) {
+        console.warn('Сохранённые кисти недоступны:', err);
+    }
+    renderPalette();
+}
+
 // ============ СЛОИ ============
 
 function getActive() {
@@ -813,7 +1067,8 @@ function hasWork() {
 }
 
 function layerTitle(layer) {
-    return `${EFFECTS[layer.type].name} · ${layer.amount}${layer.note ? ' · ' + layer.note : ''}`;
+    const amount = layer.type === 'stamp' ? `${layer.amount}%` : layer.amount;
+    return `${EFFECTS[layer.type].name} · ${amount}${layer.note ? ' · ' + layer.note : ''}`;
 }
 
 function selectLayer(id) {
@@ -1035,6 +1290,14 @@ function render() {
     let below = '';
     for (const layer of layers) {
         if (layer.hidden || !layer.strokes.length) continue;
+        if (layer.type === 'stamp') {
+            // В слое штампов хранятся сами отпечатки, их просто накладываем
+            below += `|${layer.id}:${effectKey(layer)}#${maskRevs.get(layer.id) || 0}`;
+            ctx.globalAlpha = layer.amount / 100;
+            ctx.drawImage(getMask(layer), 0, 0);
+            ctx.globalAlpha = 1;
+            continue;
+        }
         const fx = below ? getStackedEffect(layer, below) : getPreviewEffect(layer);
         below += `|${layer.id}:${effectKey(layer)}#${maskRevs.get(layer.id) || 0}`;
         tmpCtx.globalCompositeOperation = 'source-over';
@@ -1259,7 +1522,14 @@ function brushRadius() {
 
 function beginStroke(e) {
     const { x, y } = canvasPoint(e);
-    const stroke = {
+    const stroke = tool !== 'eraser' && currentEffect === 'stamp' ? {
+        kind: 'stamp',
+        brush: currentBrushId,
+        size: brushRadius() * 2,
+        spacing: stampSpacing.value / 100,
+        rotate: stampRotate.checked,
+        points: [x, y]
+    } : {
         kind: tool === 'eraser' ? 'erase' : 'paint',
         r: brushRadius(),
         hardness: 1 - softnessSlider.value / 100,
@@ -1432,9 +1702,15 @@ function updateBrushCursor(e) {
     }
     const rect = viewport.getBoundingClientRect();
     const size = brushRadius() * 2 * canvas.clientWidth * view.z / pw;
-    brushCursor.style.width = brushCursor.style.height = `${size}px`;
+    // В режиме штампа под курсором полупрозрачный отпечаток, иначе круг кисти
+    const brush = currentEffect === 'stamp' && tool === 'brush' ? brushes.get(currentBrushId) : null;
+    const { w, h } = brush ? brushSize(brush, size) : { w: size, h: size };
+    brushCursor.classList.toggle('stamp', !!brush);
+    brushCursor.style.backgroundImage = brush ? `url("${brush.thumb}")` : '';
+    brushCursor.style.width = `${w}px`;
+    brushCursor.style.height = `${h}px`;
     brushCursor.style.transform =
-        `translate(${e.clientX - rect.left - size / 2}px, ${e.clientY - rect.top - size / 2}px)`;
+        `translate(${e.clientX - rect.left - w / 2}px, ${e.clientY - rect.top - h / 2}px)`;
     brushCursor.classList.add('visible');
 }
 
@@ -1457,8 +1733,12 @@ function syncControls() {
     amountValue.textContent = amountSlider.value;
     reseedBtn.classList.toggle('hidden', currentEffect !== 'glitch');
     reseedBtn.disabled = !(active && active.type === 'glitch');
+    stampControls.classList.toggle('hidden', currentEffect !== 'stamp');
+    applyFullBtn.disabled = currentEffect === 'stamp';
+    facesBtn.textContent = currentEffect === 'stamp' ? '🙂 Найти лица и закрыть штампом' : '🙂 Найти и скрыть лица';
 
     renderLayerList();
+    refreshBrushCursor();
 }
 
 function setEffect(effect) {
@@ -1470,6 +1750,7 @@ function setEffect(effect) {
 
 function setTool(value) {
     tool = value;
+    refreshBrushCursor();
     brushBtn.classList.toggle('active', tool === 'brush');
     eraserBtn.classList.toggle('active', tool === 'eraser');
     brushBtn.setAttribute('aria-pressed', tool === 'brush');
@@ -1704,6 +1985,18 @@ facesBtn.addEventListener('click', async () => {
         const layer = createLayer(currentEffect, { note: `лица: ${faces.length}` });
         const hardness = 1 - softnessSlider.value / 100;
         faces.forEach(f => {
+            if (currentEffect === 'stamp') {
+                // Штамп по центру лица, с запасом на волосы и подбородок
+                layer.strokes.push({
+                    kind: 'stamp',
+                    brush: currentBrushId,
+                    size: Math.max(f.w, f.h) * 1.6,
+                    spacing: 1,
+                    rotate: false,
+                    points: [f.x + f.w / 2, f.y + f.h * 0.45]
+                });
+                return;
+            }
             // Эллипс с запасом: рамка детектора не захватывает лоб, волосы и подбородок
             layer.strokes.push({
                 kind: 'ellipse',
@@ -1717,7 +2010,7 @@ facesBtn.addEventListener('click', async () => {
         rebuildMasks();
         changed();
         syncControls();
-        toast(`Найдено лиц: ${faces.length}. Проверьте результат — пропущенные закрасьте кистью`);
+        toast(`Найдено лиц: ${faces.length}. Проверьте результат — пропущенные добавьте кистью вручную`);
     } catch (err) {
         console.error(err);
         toast('Не удалось загрузить модель поиска лиц. Проверьте подключение к интернету.', true);
@@ -1762,7 +2055,7 @@ document.addEventListener('keydown', (e) => {
         case 'KeyN': startNewLayer(); break;
         case 'BracketLeft': setBrushSize(+brushSizeSlider.value - 5); break;
         case 'BracketRight': setBrushSize(+brushSizeSlider.value + 5); break;
-        case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4':
+        case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5':
             setEffect(EFFECT_ORDER[+e.code.slice(5) - 1]);
             break;
         case 'Equal': case 'NumpadAdd': zoomCenter(1.5); break;
@@ -1831,13 +2124,20 @@ async function renderFullSize(type) {
 
         for (const layer of used) {
             await nextFrame();
-            // Как и в превью, эффект обрабатывает результат всех слоёв под ним
-            const data = computeEffect(layer, outCtx.getImageData(0, 0, w, h), unit * sx);
-
             maskCtx.setTransform(1, 0, 0, 1, 0, 0);
             maskCtx.clearRect(0, 0, w, h);
             maskCtx.setTransform(sx, 0, 0, sy, 0, 0);
             layer.strokes.forEach(stroke => replayStroke(maskCtx, stroke));
+
+            if (layer.type === 'stamp') {
+                outCtx.globalAlpha = layer.amount / 100;
+                outCtx.drawImage(mask, 0, 0);
+                outCtx.globalAlpha = 1;
+                continue;
+            }
+
+            // Как и в превью, эффект обрабатывает результат всех слоёв под ним
+            const data = computeEffect(layer, outCtx.getImageData(0, 0, w, h), unit * sx);
 
             fxCtx.globalCompositeOperation = 'source-over';
             fxCtx.putImageData(data, 0, 0);
@@ -1997,3 +2297,5 @@ if (new URLSearchParams(location.search).has('shared') && 'caches' in window) {
 setTool('brush');
 syncControls();
 updateHistoryButtons();
+renderPalette();
+loadSavedBrushes();

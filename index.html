@@ -59,6 +59,7 @@
                     <button data-effect="blur" class="mode-btn">Блюр</button>
                     <button data-effect="glitch" class="mode-btn">Глитч</button>
                     <button data-effect="jpeg" class="mode-btn">Шакализация</button>
+                    <button data-effect="stamp" class="mode-btn wide">🖼 Штамп — картинка поверх фото</button>
                 </div>
             </div>
 
@@ -66,6 +67,19 @@
                 <label for="amount"><span id="amountLabel">Степень пикселизации</span>: <span id="amountValue">62</span></label>
                 <input type="range" id="amount" min="2" max="100" value="62">
                 <button id="reseedBtn" class="secondary-btn hidden">🎲 Другой вариант глитча</button>
+            </div>
+
+            <div class="control-group hidden" id="stampControls">
+                <label>Картинка для штампа:</label>
+                <div class="stamp-palette" id="stampPalette"></div>
+                <button id="addBrushBtn" class="secondary-btn">＋ Загрузить свою (SVG, PNG, JPG)</button>
+                <input type="file" id="brushInput" accept="image/*,.svg" multiple hidden>
+                <label for="stampSpacing" class="spaced">Интервал между отпечатками: <span id="stampSpacingValue">120</span>%</label>
+                <input type="range" id="stampSpacing" min="20" max="300" value="120">
+                <label class="check-row" for="stampRotate">
+                    <input type="checkbox" id="stampRotate">
+                    Поворачивать по направлению движения
+                </label>
             </div>
 
             <div class="control-group">
@@ -79,7 +93,7 @@
                     <button id="eraserBtn" class="mode-btn">🧹 Ластик</button>
                 </div>
                 <label for="brushSize">Размер кисти: <span id="brushSizeValue">30</span></label>
-                <input type="range" id="brushSize" min="5" max="100" value="30">
+                <input type="range" id="brushSize" min="5" max="200" value="30">
                 <label for="softness" class="spaced">Мягкость края: <span id="softnessValue">0</span>%</label>
                 <input type="range" id="softness" min="0" max="100" value="0">
                 <label class="check-row" for="eraseActiveOnly">
@@ -126,7 +140,7 @@
                 <ul>
                     <li><kbd>B</kbd> кисть, <kbd>E</kbd> ластик</li>
                     <li><kbd>[</kbd> <kbd>]</kbd> размер кисти</li>
-                    <li><kbd>1</kbd>–<kbd>4</kbd> эффекты, <kbd>N</kbd> новый слой</li>
+                    <li><kbd>1</kbd>–<kbd>5</kbd> эффекты и штамп, <kbd>N</kbd> новый слой</li>
                     <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> отменить, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> вернуть</li>
                     <li><kbd>+</kbd> <kbd>−</kbd> масштаб, <kbd>0</kbd> вписать, <kbd>пробел</kbd> + мышь — перемещение</li>
                     <li><kbd>C</kbd> (удерживать) — оригинал</li>
