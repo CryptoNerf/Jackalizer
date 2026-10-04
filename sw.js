@@ -1,7 +1,7 @@
 'use strict';
 
 // Версию нужно менять при изменении списка APP_FILES
-const APP_CACHE = 'jackalizer-app-v1';
+const APP_CACHE = 'jackalizer-app-v2';
 const CDN_CACHE = 'jackalizer-cdn-v1';
 const SHARE_CACHE = 'jackalizer-share';
 
@@ -12,7 +12,7 @@ const APP_FILES = [
     '/manifest.webmanifest',
     '/img/favicon.png',
     '/img/jackalizer2.webp',
-    '/img/shakalizatordesctop3.webp',
+    '/img/background-wide.webp',
     '/img/icon-192.png'
 ];
 

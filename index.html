@@ -32,6 +32,7 @@
         <symbol id="i-zoom-in" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></symbol>
         <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/></symbol>
         <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+        <symbol id="i-size" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></symbol>
         <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
         <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></symbol>
         <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
@@ -60,6 +61,42 @@
                 </picture>
             </header>
 
+            <!-- Инструменты: на компьютере — в шапке рядом с логотипом, на телефоне — под фото -->
+            <div class="toolbar" id="toolbar">
+                <div class="tb-group seg">
+                    <button id="brushBtn" class="tb-btn active" title="Кисть (B)" aria-label="Кисть"><svg class="icon"><use href="#i-brush"/></svg></button>
+                    <button id="eraserBtn" class="tb-btn" title="Ластик (E)" aria-label="Ластик"><svg class="icon"><use href="#i-eraser"/></svg></button>
+                </div>
+                <label class="tb-slider" for="brushSize" title="Размер кисти ( [ и ] )">
+                    <svg class="icon tb-icon"><use href="#i-size"/></svg><span class="tb-label">Размер</span>
+                    <input type="range" id="brushSize" min="5" max="200" value="30">
+                    <span class="tb-value" id="brushSizeValue">30</span>
+                </label>
+                <label class="tb-slider tb-extra" for="softness" title="Мягкость края кисти">
+                    <svg class="icon tb-icon"><use href="#i-fx-blur"/></svg><span class="tb-label">Мягкость</span>
+                    <input type="range" id="softness" min="0" max="100" value="0">
+                    <span class="tb-value"><span id="softnessValue">0</span>%</span>
+                </label>
+                <label class="tb-check tb-extra eraser-only" for="eraseActiveOnly">
+                    <input type="checkbox" id="eraseActiveOnly">
+                    только выбранный слой
+                </label>
+                <div class="tb-spacer"></div>
+                <div class="tb-group">
+                    <button id="undoBtn" class="tb-btn" title="Отменить (Ctrl+Z)" aria-label="Отменить"><svg class="icon"><use href="#i-undo"/></svg></button>
+                    <button id="redoBtn" class="tb-btn" title="Вернуть (Ctrl+Shift+Z)" aria-label="Вернуть"><svg class="icon"><use href="#i-redo"/></svg></button>
+                </div>
+                <button id="compareBtn" class="tb-btn tb-compare" title="Удерживайте, чтобы увидеть оригинал (C)" aria-label="Удерживайте, чтобы увидеть оригинал">
+                    <svg class="icon"><use href="#i-eye"/></svg><span class="tb-text">Оригинал</span>
+                </button>
+                <div class="tb-group tb-extra">
+                    <button id="zoomOutBtn" class="tb-btn" title="Уменьшить (−)" aria-label="Уменьшить"><svg class="icon"><use href="#i-zoom-out"/></svg></button>
+                    <button id="zoomFitBtn" class="tb-btn tb-zoom" title="Вписать в экран (0)">100%</button>
+                    <button id="zoomInBtn" class="tb-btn" title="Увеличить (+)" aria-label="Увеличить"><svg class="icon"><use href="#i-zoom-in"/></svg></button>
+                </div>
+                <button id="moreBtn" class="tb-btn tb-more" title="Ещё настройки кисти" aria-label="Ещё настройки кисти" aria-expanded="false"><svg class="icon"><use href="#i-sliders"/></svg></button>
+            </div>
+
             <!-- Стартовый экран -->
             <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Загрузить изображение">
                 <div>
@@ -72,41 +109,6 @@
 
             <!-- Рабочее поле -->
             <section class="stage-card" id="stageCard">
-                <div class="toolbar" id="toolbar">
-                    <div class="tb-group seg">
-                        <button id="brushBtn" class="tb-btn active" title="Кисть (B)" aria-label="Кисть"><svg class="icon"><use href="#i-brush"/></svg></button>
-                        <button id="eraserBtn" class="tb-btn" title="Ластик (E)" aria-label="Ластик"><svg class="icon"><use href="#i-eraser"/></svg></button>
-                    </div>
-                    <label class="tb-slider" for="brushSize" title="Размер кисти ( [ и ] )">
-                        <span class="tb-label">Размер</span>
-                        <input type="range" id="brushSize" min="5" max="200" value="30">
-                        <span class="tb-value" id="brushSizeValue">30</span>
-                    </label>
-                    <label class="tb-slider tb-extra" for="softness" title="Мягкость края кисти">
-                        <span class="tb-label">Мягкость</span>
-                        <input type="range" id="softness" min="0" max="100" value="0">
-                        <span class="tb-value"><span id="softnessValue">0</span>%</span>
-                    </label>
-                    <label class="tb-check tb-extra eraser-only" for="eraseActiveOnly">
-                        <input type="checkbox" id="eraseActiveOnly">
-                        только выбранный слой
-                    </label>
-                    <div class="tb-spacer"></div>
-                    <div class="tb-group">
-                        <button id="undoBtn" class="tb-btn" title="Отменить (Ctrl+Z)" aria-label="Отменить"><svg class="icon"><use href="#i-undo"/></svg></button>
-                        <button id="redoBtn" class="tb-btn" title="Вернуть (Ctrl+Shift+Z)" aria-label="Вернуть"><svg class="icon"><use href="#i-redo"/></svg></button>
-                    </div>
-                    <button id="compareBtn" class="tb-btn tb-compare" title="Удерживайте, чтобы увидеть оригинал (C)" aria-label="Удерживайте, чтобы увидеть оригинал">
-                        <svg class="icon"><use href="#i-eye"/></svg><span class="tb-text">Оригинал</span>
-                    </button>
-                    <div class="tb-group tb-extra">
-                        <button id="zoomOutBtn" class="tb-btn" title="Уменьшить (−)" aria-label="Уменьшить"><svg class="icon"><use href="#i-zoom-out"/></svg></button>
-                        <button id="zoomFitBtn" class="tb-btn tb-zoom" title="Вписать в экран (0)">100%</button>
-                        <button id="zoomInBtn" class="tb-btn" title="Увеличить (+)" aria-label="Увеличить"><svg class="icon"><use href="#i-zoom-in"/></svg></button>
-                    </div>
-                    <button id="moreBtn" class="tb-btn tb-more" title="Ещё настройки кисти" aria-label="Ещё настройки кисти" aria-expanded="false"><svg class="icon"><use href="#i-sliders"/></svg></button>
-                </div>
-
                 <div class="stage" id="stage">
                     <div class="viewport" id="viewport">
                         <canvas id="canvas"></canvas>

@@ -1948,8 +1948,8 @@ function loadFaceApi() {
     if (!faceApiPromise) {
         faceApiPromise = (async () => {
             let lastError;
-            for (let i = 0; i < 3; i++) {
-                if (i) await new Promise(resolve => setTimeout(resolve, 1000 * i));
+            for (let i = 0; i < 4; i++) {
+                if (i) await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** (i - 1)));
                 const attempt = faceApiAttempt++;
                 try {
                     const api = await import(attempt ? `${FACE_API_URL}?retry=${attempt}` : FACE_API_URL);

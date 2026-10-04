@@ -18,11 +18,12 @@
     --shadow: 0 10px 30px rgba(30, 60, 90, 0.18);
     --sidebar-w: 340px;
 
-    /* Земля с шакалом: картинка фона растягивается минимум на ширину экрана.
-       Отношение ширины картинки к высоте земли (ниже горизонта) ≈ 8.2 */
-    --ground-min: 0px;
-    --bg-width: max(100vw, calc(var(--ground-min) * 8.2));
-    --ground: calc(var(--bg-width) / 8.2);
+    /* Земля с шакалом. Фон расширен по бокам зеркальной землёй, поэтому её высоту
+       можно задавать независимо от ширины окна. Ширина картинки / высота земли
+       (от верха холмов на горизонте) ≈ 15.3; картинка всегда не уже экрана. */
+    --ground-target: clamp(96px, 15.5vh, 180px);
+    --bg-width: max(100vw, calc(var(--ground-target) * 15.3));
+    --ground: calc(var(--bg-width) / 15.3);
 }
 
 /* ============ БАЗА ============ */
@@ -42,8 +43,8 @@ body {
     font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     color: var(--text);
     background-color: var(--sky);
-    background-image: url('img/shakalizatordesctop3.jpg');
-    background-image: image-set(url('img/shakalizatordesctop3.webp') type('image/webp'), url('img/shakalizatordesctop3.jpg') type('image/jpeg'));
+    background-image: url('img/background-wide.jpg');
+    background-image: image-set(url('img/background-wide.webp') type('image/webp'), url('img/background-wide.jpg') type('image/jpeg'));
     background-repeat: no-repeat;
     background-position: center bottom;
     background-size: var(--bg-width) auto;
@@ -129,6 +130,7 @@ input:focus-visible,
 .main {
     display: flex;
     flex-direction: column;
+    gap: 12px;
     min-width: 0;
     min-height: 0;
     padding-bottom: max(0px, calc(var(--ground) - 6px));
@@ -138,13 +140,26 @@ input:focus-visible,
     flex: none;
     display: flex;
     justify-content: center;
-    margin-bottom: 12px;
+    align-items: center;
 }
 
 .logo {
     display: block;
     width: auto;
-    height: clamp(40px, 7.5vh, 76px);
+    height: 52px;
+}
+
+/* Компьютер: логотип и инструменты — одной строкой шапки, всё остальное — фото */
+@media (min-width: 900px) {
+    body.editing .main {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    body.editing .stage-card {
+        grid-column: 1 / -1;
+    }
 }
 
 body:not(.editing) .app {
@@ -153,6 +168,7 @@ body:not(.editing) .app {
 
 body:not(.editing) .sidebar,
 body:not(.editing) .stage-card,
+body:not(.editing) .toolbar,
 body.editing .drop-zone {
     display: none;
 }
@@ -221,7 +237,7 @@ input[type="file"] {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: var(--surface);
+    background: rgba(233, 238, 243, 0.94);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     overflow: hidden;
@@ -234,8 +250,7 @@ input[type="file"] {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 14px;
-    background: #e9eef3;
+    padding: 10px;
 }
 
 /* Окно просмотра: при увеличении холст сдвигается и масштабируется внутри него */
@@ -321,8 +336,11 @@ canvas {
     flex-wrap: wrap;
     align-items: center;
     gap: 6px 12px;
+    min-width: 0;
     padding: 8px 10px;
-    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
 }
 
 .tb-group {
@@ -380,6 +398,12 @@ canvas {
 
 .tb-slider input {
     width: 110px;
+}
+
+.tb-icon {
+    display: none;
+    width: 18px;
+    height: 18px;
 }
 
 .tb-value {
@@ -689,7 +713,7 @@ body.tool-eraser .tb-check.eraser-only {
     justify-content: center;
     gap: 6px;
     height: 38px;
-    padding: 0 10px;
+    padding: 0 8px;
     border: 1px solid var(--line);
     border-radius: 10px;
     background: white;
@@ -1011,13 +1035,34 @@ input[type="range"]::-moz-range-thumb {
 
 /* ============ СРЕДНИЕ ЭКРАНЫ ============ */
 
-@media (max-width: 1400px) {
-    .tb-compare .tb-text {
+/* Чем уже окно, тем компактнее инструменты: подписи заменяются иконками */
+@media (max-width: 1500px) {
+    .tb-compare .tb-text,
+    .tb-label {
         display: none;
     }
 
+    .tb-icon {
+        display: block;
+    }
+
+    .tb-slider {
+        gap: 6px;
+    }
+
     .tb-slider input {
-        width: 90px;
+        width: 96px;
+    }
+}
+
+/* Средние окна: мягкость и масштаб — под кнопкой «ещё», чтобы строка не переносилась */
+@media (min-width: 900px) and (max-width: 1180px) {
+    .toolbar:not(.expanded) .tb-extra {
+        display: none !important;
+    }
+
+    .tb-more {
+        display: inline-flex;
     }
 }
 
@@ -1026,7 +1071,15 @@ input[type="range"]::-moz-range-thumb {
         --sidebar-w: 300px;
     }
 
-    .tb-label {
+    body.editing .logo {
+        height: 44px;
+    }
+
+    .tb-slider input {
+        width: 76px;
+    }
+
+    .pane .btn-row .icon {
         display: none;
     }
 }
@@ -1035,7 +1088,7 @@ input[type="range"]::-moz-range-thumb {
 
 @media (max-width: 899px) {
     :root {
-        --ground-min: clamp(60px, 10dvh, 96px);
+        --ground-target: clamp(60px, 10dvh, 96px);
         --pane-h: clamp(130px, 22dvh, 200px);
     }
 
@@ -1048,15 +1101,12 @@ input[type="range"]::-moz-range-thumb {
 
     .main {
         flex: 0 1 auto;
+        gap: 8px;
         padding-bottom: 0;
     }
 
     body:not(.editing) .main {
         flex: 1;
-    }
-
-    .app-header {
-        margin-bottom: 6px;
     }
 
     body.editing .logo {
@@ -1085,14 +1135,17 @@ input[type="range"]::-moz-range-thumb {
 
     /* Инструменты — под картинкой, ближе к пальцу */
     .toolbar {
-        order: 2;
+        order: 3;
         gap: 4px 6px;
         padding: 6px;
-        border-top: 1px solid var(--line);
-        border-bottom: 0;
+    }
+
+    .stage-card {
+        order: 2;
     }
 
     .tb-label,
+    .tb-icon,
     .tb-spacer,
     .tb-compare .tb-text {
         display: none;
