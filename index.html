@@ -4,1114 +4,144 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jackalizer</title>
-    <meta property="og:image" content="img/preview.jpg">
+    <meta name="description" content="Пикселизация, размытие, глитч и шакализация любой области фото прямо в браузере. Автоматический поиск лиц. Изображения никуда не загружаются.">
+    <meta name="theme-color" content="#A4CFEC">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://jackalizer.vercel.app/">
+    <meta property="og:image" content="https://jackalizer.vercel.app/img/preview.jpg">
+    <meta property="og:image:width" content="1798">
+    <meta property="og:image:height" content="1000">
     <meta property="og:title" content="Jackalizer">
-    <meta property="og:description" content="Image pixelation tool">
+    <meta property="og:description" content="Пикселизация, размытие, глитч и шакализация любой области фото прямо в браузере">
+    <meta name="twitter:card" content="summary_large_image">
     <link rel="icon" type="image/png" href="img/favicon.png">
+    <link rel="apple-touch-icon" href="img/icon-180.png">
+    <link rel="manifest" href="manifest.webmanifest">
     <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
     <h1 class="main-title">Jackalizer</h1>
-    <img class="header-image" src="img/jackalizer2.png" alt="">
+    <picture>
+        <source srcset="img/jackalizer2.webp" type="image/webp">
+        <img class="header-image" src="img/jackalizer2.png" alt="Jackalizer" width="300" height="122">
+    </picture>
     <div class="main-container" id="mainContainer">
         <div class="panel left-panel">
-            <div class="drop-zone" id="dropZone">
-                <p>your photo</p>
+            <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Загрузить изображение">
+                <div>
+                    <p>your photo</p>
+                    <p class="drop-hint">нажмите, перетащите файл или вставьте из буфера (Ctrl+V)</p>
+                </div>
                 <input type="file" id="fileInput" accept="image/*">
             </div>
-            <canvas id="canvas"></canvas>
+            <div class="canvas-wrap hidden" id="canvasWrap">
+                <div class="viewport" id="viewport">
+                    <canvas id="canvas"></canvas>
+                    <div class="brush-cursor" id="brushCursor"></div>
+                    <div class="zoom-controls">
+                        <button id="zoomOutBtn" title="Уменьшить (−)" aria-label="Уменьшить">−</button>
+                        <button id="zoomFitBtn" title="Вписать (0)">100%</button>
+                        <button id="zoomInBtn" title="Увеличить (+)" aria-label="Увеличить">+</button>
+                    </div>
+                </div>
+                <p class="canvas-hint">Закрасьте кистью области, к которым нужно применить эффект.
+                    <span class="hint-touch">Двумя пальцами — масштаб.</span>
+                    <span class="hint-mouse">Ctrl + колесо — масштаб, пробел + мышь — перемещение.</span></p>
+            </div>
         </div>
 
         <div class="panel right-panel hidden" id="rightPanel">
             <div class="control-group">
                 <label>Выберите эффект:</label>
-                <div class="button-group">
-                    <button id="pixelEffectBtn" class="mode-btn active">Пикселизация</button>
-                    <button id="blurEffectBtn" class="mode-btn">Блюр</button>
-                    <button id="glitchEffectBtn" class="mode-btn">Глитч</button>
+                <div class="button-group effect-grid">
+                    <button data-effect="pixelate" class="mode-btn active">Пикселизация</button>
+                    <button data-effect="blur" class="mode-btn">Блюр</button>
+                    <button data-effect="glitch" class="mode-btn">Глитч</button>
+                    <button data-effect="jpeg" class="mode-btn">Шакализация</button>
                 </div>
             </div>
 
-            <div class="control-group" id="pixelControls">
-                <label for="pixelSize">Степень пикселизации: <span id="pixelSizeValue">62</span></label>
-                <input type="range" id="pixelSize" min="2" max="100" value="62">
+            <div class="control-group">
+                <label for="amount"><span id="amountLabel">Степень пикселизации</span>: <span id="amountValue">62</span></label>
+                <input type="range" id="amount" min="2" max="100" value="62">
+                <button id="reseedBtn" class="secondary-btn hidden">🎲 Другой вариант глитча</button>
             </div>
 
-            <div class="control-group hidden" id="blurControls">
-                <label for="blurSize">Сила блюра: <span id="blurSizeValue">10</span></label>
-                <input type="range" id="blurSize" min="1" max="50" value="10">
+            <div class="control-group">
+                <button id="facesBtn" class="faces-btn">🙂 Найти и скрыть лица</button>
             </div>
 
-            <div class="control-group hidden" id="glitchControls">
-                <label for="glitchIntensity">Интенсивность глитча: <span id="glitchIntensityValue">15</span></label>
-                <input type="range" id="glitchIntensity" min="1" max="50" value="15">
-            </div>
-
-            <div class="control-group hidden" id="brushControls">
+            <div class="control-group">
                 <label>Режим рисования:</label>
                 <div class="button-group">
-                    <button id="brushBtn" class="mode-btn">🖌️ Кисть</button>
+                    <button id="brushBtn" class="mode-btn active">🖌️ Кисть</button>
                     <button id="eraserBtn" class="mode-btn">🧹 Ластик</button>
                 </div>
                 <label for="brushSize">Размер кисти: <span id="brushSizeValue">30</span></label>
                 <input type="range" id="brushSize" min="5" max="100" value="30">
-                <button id="clearMaskBtn" class="secondary-btn">Очистить всё</button>
+                <label for="softness" class="spaced">Мягкость края: <span id="softnessValue">0</span>%</label>
+                <input type="range" id="softness" min="0" max="100" value="0">
+                <label class="check-row" for="eraseActiveOnly">
+                    <input type="checkbox" id="eraseActiveOnly">
+                    Ластик стирает только выбранный слой
+                </label>
+            </div>
+
+            <div class="control-group">
+                <div class="button-group">
+                    <button id="undoBtn" class="mode-btn" title="Отменить (Ctrl+Z)">↶ Отменить</button>
+                    <button id="redoBtn" class="mode-btn" title="Вернуть (Ctrl+Shift+Z)">↷ Вернуть</button>
+                </div>
+                <button id="compareBtn" class="secondary-btn" title="Удерживайте, чтобы увидеть оригинал (C)">👁 Удерживайте — оригинал</button>
                 <button id="applyFullBtn" class="secondary-btn">Применить ко всему</button>
             </div>
 
-            <div class="buttons hidden" id="buttons">
+            <div class="control-group">
+                <div class="section-head">
+                    <label>Слои:</label>
+                    <button id="newLayerBtn" class="small-btn" title="Следующий мазок начнёт новый слой (N)">＋ Новый слой</button>
+                </div>
+                <ul class="layer-list" id="layerList"></ul>
+                <p class="layers-hint">Верхние слои накладываются на нижние. Порядок меняется перетаскиванием за ⋮⋮.</p>
+                <button id="clearMaskBtn" class="secondary-btn">Удалить все слои</button>
+            </div>
+
+            <div class="buttons" id="buttons">
+                <label class="format-row" for="formatSelect">
+                    Формат:
+                    <select id="formatSelect">
+                        <option value="image/png">PNG — без потерь</option>
+                        <option value="image/jpeg">JPEG — меньше размер</option>
+                    </select>
+                </label>
                 <button id="downloadBtn">Скачать результат</button>
+                <button id="shareBtn" class="hidden">Поделиться / сохранить в фото</button>
+                <button id="copyBtn" class="hidden">Копировать в буфер</button>
                 <button id="resetBtn">Новое изображение</button>
             </div>
+
+            <details class="shortcuts">
+                <summary>Горячие клавиши</summary>
+                <ul>
+                    <li><kbd>B</kbd> кисть, <kbd>E</kbd> ластик</li>
+                    <li><kbd>[</kbd> <kbd>]</kbd> размер кисти</li>
+                    <li><kbd>1</kbd>–<kbd>4</kbd> эффекты, <kbd>N</kbd> новый слой</li>
+                    <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> отменить, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> вернуть</li>
+                    <li><kbd>+</kbd> <kbd>−</kbd> масштаб, <kbd>0</kbd> вписать, <kbd>пробел</kbd> + мышь — перемещение</li>
+                    <li><kbd>C</kbd> (удерживать) — оригинал</li>
+                    <li><kbd>Ctrl</kbd>+<kbd>V</kbd> вставить изображение</li>
+                </ul>
+            </details>
         </div>
     </div>
 
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
     <footer>
-        <a href="https://cryptonerf.github.io/portfolio/" target="_blank">Copyright 2025 Émile Alexanyan</a>
+        <a href="https://cryptonerf.github.io/portfolio/" target="_blank" rel="noopener">Copyright 2025 Émile Alexanyan</a>
     </footer>
 
-    <script>
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const mainContainer = document.getElementById('mainContainer');
-        const rightPanel = document.getElementById('rightPanel');
-        const buttons = document.getElementById('buttons');
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-
-        const pixelEffectBtn = document.getElementById('pixelEffectBtn');
-        const blurEffectBtn = document.getElementById('blurEffectBtn');
-        const glitchEffectBtn = document.getElementById('glitchEffectBtn');
-        const pixelControls = document.getElementById('pixelControls');
-        const blurControls = document.getElementById('blurControls');
-        const glitchControls = document.getElementById('glitchControls');
-        const pixelSizeSlider = document.getElementById('pixelSize');
-        const pixelSizeValue = document.getElementById('pixelSizeValue');
-        const blurSizeSlider = document.getElementById('blurSize');
-        const blurSizeValue = document.getElementById('blurSizeValue');
-        const glitchIntensitySlider = document.getElementById('glitchIntensity');
-        const glitchIntensityValue = document.getElementById('glitchIntensityValue');
-        const brushControls = document.getElementById('brushControls');
-        const brushBtn = document.getElementById('brushBtn');
-        const eraserBtn = document.getElementById('eraserBtn');
-        const brushSizeSlider = document.getElementById('brushSize');
-        const brushSizeValue = document.getElementById('brushSizeValue');
-        const clearMaskBtn = document.getElementById('clearMaskBtn');
-        const applyFullBtn = document.getElementById('applyFullBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const resetBtn = document.getElementById('resetBtn');
-
-        let currentImage = null;
-        let originalImageData = null;
-        let pixelatedImageData = null; // Кэш для пикселизации
-        let blurredImageData = null; // Кэш для блюра
-        let glitchImageData = null; // Кэш для глитча
-        let glitchParams = null; // Параметры для воспроизведения глитча
-        let isDrawing = false;
-        let brushMode = 'brush'; // 'brush' or 'eraser'
-        let brushSize = 30;
-        let currentEffect = 'pixelate'; // 'pixelate' | 'blur' | 'glitch'
-        let scaleRatio = 1; // Соотношение между оригиналом и отображаемым размером
-        let canvasSupportsBlur = null; // Проверка поддержки CSS filter для canvas
-
-        // Проверка поддержки CSS filter: blur() для canvas
-        function checkCanvasBlurSupport() {
-            if (canvasSupportsBlur !== null) return canvasSupportsBlur;
-
-            try {
-                const testCanvas = document.createElement('canvas');
-                const testCtx = testCanvas.getContext('2d');
-                testCanvas.width = 4;
-                testCanvas.height = 4;
-
-                // Рисуем белый квадрат
-                testCtx.fillStyle = 'white';
-                testCtx.fillRect(1, 1, 2, 2);
-
-                // Применяем blur
-                const blurCanvas = document.createElement('canvas');
-                const blurCtx = blurCanvas.getContext('2d');
-                blurCanvas.width = 4;
-                blurCanvas.height = 4;
-                blurCtx.filter = 'blur(1px)';
-                blurCtx.drawImage(testCanvas, 0, 0);
-
-                // Проверяем, произошло ли размытие
-                const data = blurCtx.getImageData(0, 0, 4, 4).data;
-                // Если blur работает, углы должны быть серыми (не чисто черными)
-                canvasSupportsBlur = data[0] > 0 || data[4] > 0;
-
-                return canvasSupportsBlur;
-            } catch (e) {
-                canvasSupportsBlur = false;
-                return false;
-            }
-        }
-
-        // Детерминированный генератор случайных чисел
-        class SeededRandom {
-            constructor(seed) {
-                this.seed = seed;
-            }
-            next() {
-                this.seed = (this.seed * 9301 + 49297) % 233280;
-                return this.seed / 233280;
-            }
-        }
-
-        // Операции рисования (в порядке создания)
-        let operations = []; // [{type: 'pixelate'|'blur'|'glitch', maskCanvas, maskCtx}]
-        let lastDrawnEffect = null;
-
-        // Drag & Drop
-        dropZone.addEventListener('click', () => fileInput.click());
-
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) {
-                loadImage(file);
-            }
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                loadImage(file);
-            }
-        });
-
-        // Загрузка изображения
-        function loadImage(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    currentImage = img;
-                    setupCanvas(img);
-                    showControls();
-                    renderCanvas();
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-
-        // Настройка канваса
-        function setupCanvas(img) {
-            const maxWidth = 800;
-            const scale = Math.min(1, maxWidth / img.width);
-            const width = Math.floor(img.width * scale);
-            const height = Math.floor(img.height * scale);
-            scaleRatio = scale;
-
-            canvas.width = width;
-            canvas.height = height;
-
-            ctx.drawImage(img, 0, 0, width, height);
-
-            // Сохраняем оригинальные данные изображения
-            originalImageData = ctx.getImageData(0, 0, width, height);
-
-            // Очищаем операции и параметры
-            operations = [];
-            lastDrawnEffect = null;
-            glitchParams = null;
-        }
-
-        // Создать новую операцию
-        function createOperation(type) {
-            const maskCanvas = document.createElement('canvas');
-            maskCanvas.width = canvas.width;
-            maskCanvas.height = canvas.height;
-            const maskCtx = maskCanvas.getContext('2d');
-            maskCtx.fillStyle = 'black';
-            maskCtx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const operation = { type, maskCanvas, maskCtx };
-            operations.push(operation);
-            return operation;
-        }
-
-        // Получить текущую операцию для рисования
-        function getCurrentOperation() {
-            // Если начали рисовать новым эффектом, создаём новую операцию
-            if (!operations.length || lastDrawnEffect !== currentEffect) {
-                lastDrawnEffect = currentEffect;
-                return createOperation(currentEffect);
-            }
-
-            // Возвращаем последнюю операцию текущего типа
-            for (let i = operations.length - 1; i >= 0; i--) {
-                if (operations[i].type === currentEffect) {
-                    return operations[i];
-                }
-            }
-
-            // Если не нашли, создаём новую
-            return createOperation(currentEffect);
-        }
-
-        // Показать элементы управления
-        function showControls() {
-            dropZone.classList.add('hidden');
-            canvas.style.display = 'block';
-            rightPanel.classList.remove('hidden');
-            mainContainer.classList.add('two-panels');
-            brushControls.classList.remove('hidden');
-            buttons.classList.remove('hidden');
-        }
-
-        // ============ РЕНДЕРИНГ ============
-
-        // Генерация эффектов (кэш)
-        function generatePixelatedImage() {
-            if (!currentImage || !originalImageData) return null;
-
-            const pixelSize = parseInt(pixelSizeSlider.value);
-            const width = canvas.width;
-            const height = canvas.height;
-
-            if (pixelSize <= 2) {
-                return originalImageData;
-            }
-
-            const smallWidth = Math.ceil(width / pixelSize);
-            const smallHeight = Math.ceil(height / pixelSize);
-
-            // Сначала создаем канвас с оригинальным изображением
-            const fullCanvas = document.createElement('canvas');
-            const fullCtx = fullCanvas.getContext('2d');
-            fullCanvas.width = width;
-            fullCanvas.height = height;
-            fullCtx.putImageData(originalImageData, 0, 0);
-
-            // Уменьшаем изображение
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = smallWidth;
-            tempCanvas.height = smallHeight;
-            tempCtx.imageSmoothingEnabled = false;
-            tempCtx.drawImage(fullCanvas, 0, 0, width, height, 0, 0, smallWidth, smallHeight);
-
-            // Увеличиваем обратно для пикселизации
-            const pixelatedCanvas = document.createElement('canvas');
-            const pixelatedCtx = pixelatedCanvas.getContext('2d');
-            pixelatedCanvas.width = width;
-            pixelatedCanvas.height = height;
-            pixelatedCtx.imageSmoothingEnabled = false;
-            pixelatedCtx.drawImage(tempCanvas, 0, 0, smallWidth, smallHeight, 0, 0, width, height);
-
-            return pixelatedCtx.getImageData(0, 0, width, height);
-        }
-
-        // Быстрый программный blur (для устройств без поддержки CSS filter)
-        function fastBlur(imageData, radius) {
-            const width = imageData.width;
-            const height = imageData.height;
-            const data = imageData.data;
-            const result = new Uint8ClampedArray(data);
-
-            const radiusPlus1 = radius + 1;
-
-            // Горизонтальный проход
-            for (let y = 0; y < height; y++) {
-                let r = 0, g = 0, b = 0;
-                let count = 0;
-
-                // Инициализация окна
-                for (let x = -radius; x <= radius; x++) {
-                    if (x >= 0 && x < width) {
-                        const i = (y * width + x) * 4;
-                        r += data[i];
-                        g += data[i + 1];
-                        b += data[i + 2];
-                        count++;
-                    }
-                }
-
-                // Скользящее окно
-                for (let x = 0; x < width; x++) {
-                    const i = (y * width + x) * 4;
-                    result[i] = r / count;
-                    result[i + 1] = g / count;
-                    result[i + 2] = b / count;
-                    result[i + 3] = data[i + 3];
-
-                    // Обновляем окно
-                    const leftX = x - radius;
-                    const rightX = x + radiusPlus1;
-
-                    if (leftX >= 0) {
-                        const li = (y * width + leftX) * 4;
-                        r -= data[li];
-                        g -= data[li + 1];
-                        b -= data[li + 2];
-                        count--;
-                    }
-
-                    if (rightX < width) {
-                        const ri = (y * width + rightX) * 4;
-                        r += data[ri];
-                        g += data[ri + 1];
-                        b += data[ri + 2];
-                        count++;
-                    }
-                }
-            }
-
-            // Вертикальный проход
-            const temp = new Uint8ClampedArray(result);
-            for (let x = 0; x < width; x++) {
-                let r = 0, g = 0, b = 0;
-                let count = 0;
-
-                for (let y = -radius; y <= radius; y++) {
-                    if (y >= 0 && y < height) {
-                        const i = (y * width + x) * 4;
-                        r += temp[i];
-                        g += temp[i + 1];
-                        b += temp[i + 2];
-                        count++;
-                    }
-                }
-
-                for (let y = 0; y < height; y++) {
-                    const i = (y * width + x) * 4;
-                    result[i] = r / count;
-                    result[i + 1] = g / count;
-                    result[i + 2] = b / count;
-                    result[i + 3] = temp[i + 3];
-
-                    const topY = y - radius;
-                    const bottomY = y + radiusPlus1;
-
-                    if (topY >= 0) {
-                        const ti = (topY * width + x) * 4;
-                        r -= temp[ti];
-                        g -= temp[ti + 1];
-                        b -= temp[ti + 2];
-                        count--;
-                    }
-
-                    if (bottomY < height) {
-                        const bi = (bottomY * width + x) * 4;
-                        r += temp[bi];
-                        g += temp[bi + 1];
-                        b += temp[bi + 2];
-                        count++;
-                    }
-                }
-            }
-
-            return new ImageData(result, width, height);
-        }
-
-        function generateBlurredImage() {
-            if (!currentImage || !originalImageData) return null;
-
-            const blurSize = parseInt(blurSizeSlider.value);
-            const width = canvas.width;
-            const height = canvas.height;
-
-            if (blurSize <= 1) {
-                return originalImageData;
-            }
-
-            // Проверяем поддержку CSS filter
-            if (checkCanvasBlurSupport()) {
-                // Используем быстрый CSS filter blur
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = width;
-                tempCanvas.height = height;
-                tempCtx.putImageData(originalImageData, 0, 0);
-
-                const blurredCanvas = document.createElement('canvas');
-                const blurredCtx = blurredCanvas.getContext('2d');
-                blurredCanvas.width = width;
-                blurredCanvas.height = height;
-                blurredCtx.filter = `blur(${blurSize}px)`;
-                blurredCtx.drawImage(tempCanvas, 0, 0);
-                blurredCtx.filter = 'none';
-
-                return blurredCtx.getImageData(0, 0, width, height);
-            } else {
-                // Используем программный blur для iOS и других устройств без поддержки
-                const radius = Math.floor(blurSize / 2);
-                return fastBlur(originalImageData, radius);
-            }
-        }
-
-        function generateGlitchImage() {
-            if (!currentImage || !originalImageData) return null;
-
-            const intensity = parseInt(glitchIntensitySlider.value);
-            const width = canvas.width;
-            const height = canvas.height;
-
-            if (intensity <= 0) {
-                return originalImageData;
-            }
-
-            const result = new ImageData(width, height);
-            const original = originalImageData.data;
-
-            // Копируем оригинал как базу
-            result.data.set(original);
-
-            // Генерируем параметры глитча с случайным seed
-            const seed = Math.floor(Math.random() * 1000000); // Случайный seed для нового глитча
-            const rng = new SeededRandom(seed);
-
-            // RGB смещение (усиленное)
-            const rgbOffset = Math.floor(intensity / 2);
-
-            // Вертикальные блоки искажений
-            const numBlocks = Math.floor(intensity / 5);
-            const blocks = [];
-            for (let i = 0; i < numBlocks; i++) {
-                blocks.push({
-                    y: Math.floor(rng.next() * height),
-                    height: Math.floor(rng.next() * (intensity * 2)) + 5,
-                    shift: Math.floor((rng.next() - 0.5) * intensity * 3),
-                    type: rng.next()
-                });
-            }
-
-            // Сохраняем параметры для экспорта
-            glitchParams = {
-                seed: seed,
-                intensity: intensity,
-                rgbOffset: rgbOffset,
-                numBlocks: numBlocks,
-                blocks: blocks
-            };
-
-            // Генерируем параметры для случайных линий (только высота, не ширина)
-            const lineGlitches = [];
-            for (let y = 0; y < height; y++) {
-                const randomGlitch = rng.next() < (intensity / 150);
-                const lineShift = randomGlitch ? Math.floor((rng.next() - 0.5) * intensity * 2) : 0;
-                lineGlitches.push({ randomGlitch, lineShift });
-            }
-
-            // Вертикальные полосы искажений
-            const numStripes = Math.floor(intensity / 8);
-            const stripes = [];
-            for (let i = 0; i < numStripes; i++) {
-                stripes.push({
-                    x: Math.floor(rng.next() * width),
-                    width: Math.floor(rng.next() * 5) + 1,
-                    shift: Math.floor((rng.next() - 0.5) * intensity)
-                });
-            }
-
-            // Сохраняем параметры (без noiseMap для экономии памяти)
-            glitchParams.lineGlitches = lineGlitches;
-            glitchParams.stripes = stripes;
-            glitchParams.numStripes = numStripes;
-
-            // Функция для генерации шума на лету
-            function getNoise(x, y) {
-                // Простой хеш на основе координат и seed
-                const hash = ((x * 73856093) ^ (y * 19349663) ^ seed) >>> 0;
-                const pseudoRandom = (hash % 10000) / 10000;
-                if (pseudoRandom < 0.1) {
-                    const noiseHash = ((hash * 2654435761) >>> 0) % 10000;
-                    return Math.floor((noiseHash / 10000 - 0.5) * 100);
-                }
-                return 0;
-            }
-
-            // Применяем эффекты построчно
-            for (let y = 0; y < height; y++) {
-                // Проверяем, попадает ли строка в блок искажений
-                let blockShift = 0;
-                let blockType = 0;
-                for (const block of blocks) {
-                    if (y >= block.y && y < block.y + block.height) {
-                        blockShift = block.shift;
-                        blockType = block.type;
-                        break;
-                    }
-                }
-
-                const { randomGlitch, lineShift } = lineGlitches[y];
-                const totalShift = blockShift + lineShift;
-
-                for (let x = 0; x < width; x++) {
-                    const i = (y * width + x) * 4;
-
-                    // RGB-смещение с учетом сдвига блока
-                    const xR = Math.min(Math.max(x + rgbOffset + totalShift, 0), width - 1);
-                    const iR = (y * width + xR) * 4;
-
-                    const xG = Math.min(Math.max(x + totalShift, 0), width - 1);
-                    const iG = (y * width + xG) * 4;
-
-                    const xB = Math.min(Math.max(x - rgbOffset + totalShift, 0), width - 1);
-                    const iB = (y * width + xB) * 4;
-
-                    result.data[i] = original[iR];
-                    result.data[i + 1] = original[iG + 1];
-                    result.data[i + 2] = original[iB + 2];
-
-                    // Специальные эффекты в блоках
-                    if (blockShift !== 0) {
-                        if (blockType < 0.3) {
-                            // Инверсия цветов
-                            result.data[i] = 255 - result.data[i];
-                            result.data[i + 1] = 255 - result.data[i + 1];
-                            result.data[i + 2] = 255 - result.data[i + 2];
-                        } else if (blockType < 0.5) {
-                            // Усиление красного канала
-                            result.data[i] = Math.min(result.data[i] * 1.5, 255);
-                        } else if (blockType < 0.7) {
-                            // Усиление синего/зеленого (cyan)
-                            result.data[i + 1] = Math.min(result.data[i + 1] * 1.3, 255);
-                            result.data[i + 2] = Math.min(result.data[i + 2] * 1.3, 255);
-                        }
-                    }
-
-                    // Случайный шум в глитч-линиях
-                    if (randomGlitch) {
-                        const noise = getNoise(x, y);
-                        if (noise !== 0) {
-                            result.data[i] = Math.max(0, Math.min(255, result.data[i] + noise));
-                            result.data[i + 1] = Math.max(0, Math.min(255, result.data[i + 1] + noise));
-                            result.data[i + 2] = Math.max(0, Math.min(255, result.data[i + 2] + noise));
-                        }
-                    }
-                }
-            }
-
-            // Применяем вертикальные полосы
-            for (let i = 0; i < numStripes; i++) {
-                const stripe = stripes[i];
-                const stripeX = stripe.x;
-                const stripeWidth = stripe.width;
-                const stripeShift = stripe.shift;
-
-                for (let y = 0; y < height; y++) {
-                    for (let dx = 0; dx < stripeWidth; dx++) {
-                        const x = stripeX + dx;
-                        if (x >= 0 && x < width) {
-                            const sourceY = Math.min(Math.max(y + stripeShift, 0), height - 1);
-                            const i = (y * width + x) * 4;
-                            const iSource = (sourceY * width + x) * 4;
-
-                            result.data[i] = original[iSource];
-                            result.data[i + 1] = original[iSource + 1];
-                            result.data[i + 2] = original[iSource + 2];
-                        }
-                    }
-                }
-            }
-
-            return result;
-        }
-
-        // Главная функция рендеринга
-        function renderCanvas() {
-            if (!originalImageData) return;
-
-            // Обновляем кэш эффектов
-            pixelatedImageData = generatePixelatedImage();
-            blurredImageData = generateBlurredImage();
-            glitchImageData = generateGlitchImage();
-
-            const width = canvas.width;
-            const height = canvas.height;
-
-            // Начинаем с оригинала
-            let result = ctx.createImageData(width, height);
-            result.data.set(originalImageData.data);
-
-            // Применяем операции в порядке их создания
-            operations.forEach(operation => {
-                let effectData;
-                if (operation.type === 'pixelate') {
-                    effectData = pixelatedImageData;
-                } else if (operation.type === 'blur') {
-                    effectData = blurredImageData;
-                } else if (operation.type === 'glitch') {
-                    effectData = glitchImageData;
-                }
-
-                if (!effectData) return;
-
-                const maskData = operation.maskCtx.getImageData(0, 0, width, height).data;
-
-                for (let i = 0; i < result.data.length; i += 4) {
-                    const maskValue = maskData[i] / 255;
-                    result.data[i] = result.data[i] * (1 - maskValue) + effectData.data[i] * maskValue;
-                    result.data[i + 1] = result.data[i + 1] * (1 - maskValue) + effectData.data[i + 1] * maskValue;
-                    result.data[i + 2] = result.data[i + 2] * (1 - maskValue) + effectData.data[i + 2] * maskValue;
-                }
-            });
-
-            ctx.putImageData(result, 0, 0);
-        }
-
-        // Рисование маски
-        function getCanvasCoordinates(e) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            return {
-                x: (e.clientX - rect.left) * scaleX,
-                y: (e.clientY - rect.top) * scaleY
-            };
-        }
-
-        function drawOnMask(x, y) {
-            if (brushMode === 'brush') {
-                // Рисуем только на маске текущего эффекта
-                const operation = getCurrentOperation();
-                if (!operation) return;
-
-                operation.maskCtx.fillStyle = 'white';
-                operation.maskCtx.beginPath();
-                operation.maskCtx.arc(x, y, brushSize, 0, Math.PI * 2);
-                operation.maskCtx.fill();
-            } else {
-                // Ластик стирает со всех масок одновременно
-                operations.forEach(op => {
-                    op.maskCtx.fillStyle = 'black';
-                    op.maskCtx.beginPath();
-                    op.maskCtx.arc(x, y, brushSize, 0, Math.PI * 2);
-                    op.maskCtx.fill();
-                });
-            }
-
-            renderCanvas();
-        }
-
-        canvas.addEventListener('mousedown', (e) => {
-            if (!currentImage) return;
-            isDrawing = true;
-            const coords = getCanvasCoordinates(e);
-            drawOnMask(coords.x, coords.y);
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            if (!isDrawing || !currentImage) return;
-            const coords = getCanvasCoordinates(e);
-            drawOnMask(coords.x, coords.y);
-        });
-
-        canvas.addEventListener('mouseup', () => {
-            isDrawing = false;
-        });
-
-        canvas.addEventListener('mouseleave', () => {
-            isDrawing = false;
-        });
-
-        // Touch events для мобильных
-        canvas.addEventListener('touchstart', (e) => {
-            if (!currentImage) return;
-            e.preventDefault();
-            isDrawing = true;
-            const touch = e.touches[0];
-            const coords = getCanvasCoordinates(touch);
-            drawOnMask(coords.x, coords.y);
-        });
-
-        canvas.addEventListener('touchmove', (e) => {
-            if (!isDrawing || !currentImage) return;
-            e.preventDefault();
-            const touch = e.touches[0];
-            const coords = getCanvasCoordinates(touch);
-            drawOnMask(coords.x, coords.y);
-        });
-
-        canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            isDrawing = false;
-        });
-
-        // Управление кистью
-        brushBtn.addEventListener('click', () => {
-            brushMode = 'brush';
-            brushBtn.classList.add('active');
-            eraserBtn.classList.remove('active');
-        });
-
-        eraserBtn.addEventListener('click', () => {
-            brushMode = 'eraser';
-            eraserBtn.classList.add('active');
-            brushBtn.classList.remove('active');
-        });
-
-        brushSizeSlider.addEventListener('input', (e) => {
-            brushSize = parseInt(e.target.value);
-            brushSizeValue.textContent = brushSize;
-        });
-
-        clearMaskBtn.addEventListener('click', () => {
-            // Очищаем все маски
-            operations.forEach(op => {
-                op.maskCtx.fillStyle = 'black';
-                op.maskCtx.fillRect(0, 0, canvas.width, canvas.height);
-            });
-            renderCanvas();
-        });
-
-        applyFullBtn.addEventListener('click', () => {
-            // Применяем текущий эффект ко всему изображению
-            const operation = getCurrentOperation();
-            if (!operation) return;
-
-            operation.maskCtx.fillStyle = 'white';
-            operation.maskCtx.fillRect(0, 0, canvas.width, canvas.height);
-            renderCanvas();
-        });
-
-        // Переключение эффектов
-        pixelEffectBtn.addEventListener('click', () => {
-            currentEffect = 'pixelate';
-            pixelEffectBtn.classList.add('active');
-            blurEffectBtn.classList.remove('active');
-            glitchEffectBtn.classList.remove('active');
-            pixelControls.classList.remove('hidden');
-            blurControls.classList.add('hidden');
-            glitchControls.classList.add('hidden');
-        });
-
-        blurEffectBtn.addEventListener('click', () => {
-            currentEffect = 'blur';
-            blurEffectBtn.classList.add('active');
-            pixelEffectBtn.classList.remove('active');
-            glitchEffectBtn.classList.remove('active');
-            blurControls.classList.remove('hidden');
-            pixelControls.classList.add('hidden');
-            glitchControls.classList.add('hidden');
-        });
-
-        glitchEffectBtn.addEventListener('click', () => {
-            currentEffect = 'glitch';
-            glitchEffectBtn.classList.add('active');
-            pixelEffectBtn.classList.remove('active');
-            blurEffectBtn.classList.remove('active');
-            glitchControls.classList.remove('hidden');
-            pixelControls.classList.add('hidden');
-            blurControls.classList.add('hidden');
-        });
-
-        // Debounce функция для оптимизации
-        let renderTimeout = null;
-        function debouncedRender() {
-            if (renderTimeout) clearTimeout(renderTimeout);
-            renderTimeout = setTimeout(() => {
-                renderCanvas();
-            }, 50); // 50ms задержка для плавности
-        }
-
-        // Слушатели изменений
-        pixelSizeSlider.addEventListener('input', (e) => {
-            pixelSizeValue.textContent = e.target.value;
-            debouncedRender();
-        });
-
-        blurSizeSlider.addEventListener('input', (e) => {
-            blurSizeValue.textContent = e.target.value;
-            debouncedRender();
-        });
-
-        glitchIntensitySlider.addEventListener('input', (e) => {
-            glitchIntensityValue.textContent = e.target.value;
-            debouncedRender();
-        });
-
-        // Скачивание в оригинальном размере
-        downloadBtn.addEventListener('click', () => {
-            if (!currentImage) return;
-
-            const originalWidth = currentImage.width;
-            const originalHeight = currentImage.height;
-
-            // Создаём эффекты в полном разрешении
-            const pixelSize = parseInt(pixelSizeSlider.value);
-            const scaledPixelSize = pixelSize / scaleRatio;
-            const smallWidth = Math.ceil(originalWidth / scaledPixelSize);
-            const smallHeight = Math.ceil(originalHeight / scaledPixelSize);
-
-            const tempCanvas1 = document.createElement('canvas');
-            const tempCtx1 = tempCanvas1.getContext('2d');
-            tempCanvas1.width = smallWidth;
-            tempCanvas1.height = smallHeight;
-            tempCtx1.imageSmoothingEnabled = true;
-            tempCtx1.drawImage(currentImage, 0, 0, originalWidth, originalHeight, 0, 0, smallWidth, smallHeight);
-
-            const fullPixelatedCanvas = document.createElement('canvas');
-            const fullPixelatedCtx = fullPixelatedCanvas.getContext('2d');
-            fullPixelatedCanvas.width = originalWidth;
-            fullPixelatedCanvas.height = originalHeight;
-            fullPixelatedCtx.imageSmoothingEnabled = false;
-            fullPixelatedCtx.drawImage(tempCanvas1, 0, 0, smallWidth, smallHeight, 0, 0, originalWidth, originalHeight);
-            const fullPixelatedData = fullPixelatedCtx.getImageData(0, 0, originalWidth, originalHeight);
-
-            const blurSize = parseInt(blurSizeSlider.value);
-            const scaledBlurSize = blurSize / scaleRatio;
-
-            const tempCanvas2 = document.createElement('canvas');
-            const tempCtx2 = tempCanvas2.getContext('2d');
-            tempCanvas2.width = originalWidth;
-            tempCanvas2.height = originalHeight;
-            tempCtx2.drawImage(currentImage, 0, 0, originalWidth, originalHeight);
-            const fullOriginalBlurData = tempCtx2.getImageData(0, 0, originalWidth, originalHeight);
-
-            // Используем CSS filter или программный blur в зависимости от поддержки
-            let fullBlurredData;
-            if (checkCanvasBlurSupport()) {
-                const fullBlurredCanvas = document.createElement('canvas');
-                const fullBlurredCtx = fullBlurredCanvas.getContext('2d');
-                fullBlurredCanvas.width = originalWidth;
-                fullBlurredCanvas.height = originalHeight;
-                fullBlurredCtx.filter = `blur(${scaledBlurSize}px)`;
-                fullBlurredCtx.drawImage(tempCanvas2, 0, 0);
-                fullBlurredCtx.filter = 'none';
-                fullBlurredData = fullBlurredCtx.getImageData(0, 0, originalWidth, originalHeight);
-            } else {
-                const scaledRadius = Math.floor(scaledBlurSize / 2);
-                fullBlurredData = fastBlur(fullOriginalBlurData, scaledRadius);
-            }
-
-            // Создаём глитч-эффект в полном разрешении используя сохраненные параметры
-            const tempCanvas3 = document.createElement('canvas');
-            const tempCtx3 = tempCanvas3.getContext('2d');
-            tempCanvas3.width = originalWidth;
-            tempCanvas3.height = originalHeight;
-            tempCtx3.drawImage(currentImage, 0, 0, originalWidth, originalHeight);
-            const fullOriginalData = tempCtx3.getImageData(0, 0, originalWidth, originalHeight);
-
-            const fullGlitchData = new ImageData(originalWidth, originalHeight);
-            fullGlitchData.data.set(fullOriginalData.data);
-
-            // Используем сохраненные параметры глитча
-            if (glitchParams && glitchParams.intensity > 0) {
-                const scaleX = originalWidth / canvas.width;
-                const scaleY = originalHeight / canvas.height;
-
-                const rgbOffset = glitchParams.rgbOffset;
-                const blocks = glitchParams.blocks;
-
-                // Масштабируем параметры блоков для полного разрешения
-                const scaledBlocks = blocks.map(block => ({
-                    y: Math.floor(block.y * scaleY),
-                    height: Math.floor(block.height * scaleY),
-                    shift: Math.floor(block.shift * scaleX),
-                    type: block.type
-                }));
-
-                // Масштабируем линии глитчей
-                const scaledLineGlitches = [];
-                for (let y = 0; y < originalHeight; y++) {
-                    const sourceY = Math.floor(y / scaleY);
-                    if (sourceY < glitchParams.lineGlitches.length) {
-                        const original = glitchParams.lineGlitches[sourceY];
-                        scaledLineGlitches.push({
-                            randomGlitch: original.randomGlitch,
-                            lineShift: Math.floor(original.lineShift * scaleX)
-                        });
-                    } else {
-                        scaledLineGlitches.push({ randomGlitch: false, lineShift: 0 });
-                    }
-                }
-
-                // Функция для генерации шума на основе seed и координат
-                function getNoiseForExport(x, y) {
-                    const sourceX = Math.floor(x / scaleX);
-                    const sourceY = Math.floor(y / scaleY);
-                    const hash = ((sourceX * 73856093) ^ (sourceY * 19349663) ^ glitchParams.seed) >>> 0;
-                    const pseudoRandom = (hash % 10000) / 10000;
-                    if (pseudoRandom < 0.1) {
-                        const noiseHash = ((hash * 2654435761) >>> 0) % 10000;
-                        return Math.floor((noiseHash / 10000 - 0.5) * 100);
-                    }
-                    return 0;
-                }
-
-                // Применяем эффекты
-                for (let y = 0; y < originalHeight; y++) {
-                    let blockShift = 0;
-                    let blockType = 0;
-                    for (const block of scaledBlocks) {
-                        if (y >= block.y && y < block.y + block.height) {
-                            blockShift = block.shift;
-                            blockType = block.type;
-                            break;
-                        }
-                    }
-
-                    const { randomGlitch, lineShift } = scaledLineGlitches[y];
-                    const totalShift = blockShift + lineShift;
-
-                    for (let x = 0; x < originalWidth; x++) {
-                        const i = (y * originalWidth + x) * 4;
-
-                        const xR = Math.min(Math.max(x + Math.floor(rgbOffset * scaleX) + totalShift, 0), originalWidth - 1);
-                        const iR = (y * originalWidth + xR) * 4;
-                        const xG = Math.min(Math.max(x + totalShift, 0), originalWidth - 1);
-                        const iG = (y * originalWidth + xG) * 4;
-                        const xB = Math.min(Math.max(x - Math.floor(rgbOffset * scaleX) + totalShift, 0), originalWidth - 1);
-                        const iB = (y * originalWidth + xB) * 4;
-
-                        fullGlitchData.data[i] = fullOriginalData.data[iR];
-                        fullGlitchData.data[i + 1] = fullOriginalData.data[iG + 1];
-                        fullGlitchData.data[i + 2] = fullOriginalData.data[iB + 2];
-
-                        if (blockShift !== 0) {
-                            if (blockType < 0.3) {
-                                fullGlitchData.data[i] = 255 - fullGlitchData.data[i];
-                                fullGlitchData.data[i + 1] = 255 - fullGlitchData.data[i + 1];
-                                fullGlitchData.data[i + 2] = 255 - fullGlitchData.data[i + 2];
-                            } else if (blockType < 0.5) {
-                                fullGlitchData.data[i] = Math.min(fullGlitchData.data[i] * 1.5, 255);
-                            } else if (blockType < 0.7) {
-                                fullGlitchData.data[i + 1] = Math.min(fullGlitchData.data[i + 1] * 1.3, 255);
-                                fullGlitchData.data[i + 2] = Math.min(fullGlitchData.data[i + 2] * 1.3, 255);
-                            }
-                        }
-
-                        if (randomGlitch) {
-                            const noise = getNoiseForExport(x, y);
-                            if (noise !== 0) {
-                                fullGlitchData.data[i] = Math.max(0, Math.min(255, fullGlitchData.data[i] + noise));
-                                fullGlitchData.data[i + 1] = Math.max(0, Math.min(255, fullGlitchData.data[i + 1] + noise));
-                                fullGlitchData.data[i + 2] = Math.max(0, Math.min(255, fullGlitchData.data[i + 2] + noise));
-                            }
-                        }
-                    }
-                }
-
-                // Применяем вертикальные полосы используя сохраненные параметры
-                const scaledStripes = glitchParams.stripes.map(stripe => ({
-                    x: Math.floor(stripe.x * scaleX),
-                    width: Math.floor(stripe.width * scaleX) || 1,
-                    shift: Math.floor(stripe.shift * scaleY)
-                }));
-
-                for (const stripe of scaledStripes) {
-                    for (let y = 0; y < originalHeight; y++) {
-                        for (let dx = 0; dx < stripe.width; dx++) {
-                            const x = stripe.x + dx;
-                            if (x >= 0 && x < originalWidth) {
-                                const sourceY = Math.min(Math.max(y + stripe.shift, 0), originalHeight - 1);
-                                const i = (y * originalWidth + x) * 4;
-                                const iSource = (sourceY * originalWidth + x) * 4;
-
-                                fullGlitchData.data[i] = fullOriginalData.data[iSource];
-                                fullGlitchData.data[i + 1] = fullOriginalData.data[iSource + 1];
-                                fullGlitchData.data[i + 2] = fullOriginalData.data[iSource + 2];
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Начинаем с оригинала
-            const exportCanvas = document.createElement('canvas');
-            const exportCtx = exportCanvas.getContext('2d');
-            exportCanvas.width = originalWidth;
-            exportCanvas.height = originalHeight;
-            exportCtx.drawImage(currentImage, 0, 0, originalWidth, originalHeight);
-
-            let result = exportCtx.getImageData(0, 0, originalWidth, originalHeight);
-
-            // Применяем операции в порядке их создания
-            operations.forEach(operation => {
-                // Масштабируем маску операции
-                const scaledMaskCanvas = document.createElement('canvas');
-                const scaledMaskCtx = scaledMaskCanvas.getContext('2d');
-                scaledMaskCanvas.width = originalWidth;
-                scaledMaskCanvas.height = originalHeight;
-                scaledMaskCtx.imageSmoothingEnabled = true;
-                scaledMaskCtx.drawImage(operation.maskCanvas, 0, 0, canvas.width, canvas.height, 0, 0, originalWidth, originalHeight);
-
-                const maskData = scaledMaskCtx.getImageData(0, 0, originalWidth, originalHeight).data;
-
-                let effectData;
-                if (operation.type === 'pixelate') {
-                    effectData = fullPixelatedData;
-                } else if (operation.type === 'blur') {
-                    effectData = fullBlurredData;
-                } else if (operation.type === 'glitch') {
-                    effectData = fullGlitchData;
-                }
-
-                for (let i = 0; i < result.data.length; i += 4) {
-                    const maskValue = maskData[i] / 255;
-                    result.data[i] = result.data[i] * (1 - maskValue) + effectData.data[i] * maskValue;
-                    result.data[i + 1] = result.data[i + 1] * (1 - maskValue) + effectData.data[i + 1] * maskValue;
-                    result.data[i + 2] = result.data[i + 2] * (1 - maskValue) + effectData.data[i + 2] * maskValue;
-                }
-            });
-
-            exportCtx.putImageData(result, 0, 0);
-
-            // Скачиваем
-            const link = document.createElement('a');
-            link.download = 'jackalizer-result.png';
-            link.href = exportCanvas.toDataURL('image/png');
-            link.click();
-        });
-
-        // Сброс
-        resetBtn.addEventListener('click', () => {
-            currentImage = null;
-            originalImageData = null;
-            pixelatedImageData = null;
-            blurredImageData = null;
-            glitchImageData = null;
-            glitchParams = null;
-            operations = [];
-            lastDrawnEffect = null;
-            currentEffect = 'pixelate';
-            fileInput.value = '';
-            pixelSizeSlider.value = 62;
-            pixelSizeValue.textContent = '62';
-            blurSizeSlider.value = 10;
-            blurSizeValue.textContent = '10';
-            glitchIntensitySlider.value = 15;
-            glitchIntensityValue.textContent = '15';
-            brushSize = 30;
-            brushSizeValue.textContent = '30';
-            brushMode = 'brush';
-            brushBtn.classList.remove('active');
-            eraserBtn.classList.remove('active');
-            pixelEffectBtn.classList.add('active');
-            blurEffectBtn.classList.remove('active');
-            glitchEffectBtn.classList.remove('active');
-            pixelControls.classList.remove('hidden');
-            blurControls.classList.add('hidden');
-            glitchControls.classList.add('hidden');
-            dropZone.classList.remove('hidden');
-            canvas.style.display = 'none';
-            rightPanel.classList.add('hidden');
-            mainContainer.classList.remove('two-panels');
-            brushControls.classList.add('hidden');
-            buttons.classList.add('hidden');
-        });
-
-        // Инициализация режима кисти
-        brushBtn.classList.add('active');
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>
